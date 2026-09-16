@@ -1,0 +1,11 @@
+{
+    "collectCoverage": true,
+    "collectCoverageFrom": ["src/**/*.js"],
+    "coveragePathIgnorePatterns": ["/node_modules/", "/tests/"],
+    "coverageReporters": ["json-summary", "text"],
+    "coverageThreshold": {
+        "global": {
+            "lines": 80
+        }
+    }
+}
