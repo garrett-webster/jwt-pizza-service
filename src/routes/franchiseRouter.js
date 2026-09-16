@@ -71,10 +71,11 @@ franchiseRouter.get(
   asyncHandler(async (req, res) => {
     let result = [];
     const userId = Number(req.params.userId);
-    if (req.user.id === userId || req.user.isRole(Role.Admin)) {
-      result = await DB.getUserFranchises(userId);
+    if (req.user.id !== userId && !req.user.isRole(Role.Admin)) {
+      return res.status(403).json({ message: 'unauthorized' });
     }
 
+    result = await DB.getUserFranchises(userId);
     res.json(result);
   })
 );
@@ -96,6 +97,7 @@ franchiseRouter.post(
 // deleteFranchise
 franchiseRouter.delete(
   '/:franchiseId',
+  authRouter.authenticateToken,
   asyncHandler(async (req, res) => {
     const franchiseId = Number(req.params.franchiseId);
     await DB.deleteFranchise(franchiseId);
