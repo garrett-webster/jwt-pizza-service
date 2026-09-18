@@ -3,7 +3,7 @@ const request = require('supertest');
 jest.mock('../../src/database/database.js', () => require('./mockDatabase'));
 
 const app = require('../../src/service');
-const { users } = require('./mockDatabase');
+const { DB, users } = require('./mockDatabase');
 
 let dinerToken;
 let adminToken;
@@ -16,6 +16,8 @@ beforeAll(async () => {
     const admin = await request(app).put('/api/auth').send({ email: 'admin-user@test.com', password: 'admin' });
     adminToken = admin.body.token;
 });
+
+beforeEach(() => jest.clearAllMocks());
 
 test('returns the authenticated user data from /me', async () => {
     const response = await request(app).get('/api/user/me').set('Authorization', `Bearer ${dinerToken}`);
@@ -35,18 +37,21 @@ test('allows a user to update their own account', async () => {
     expect(response.status).toBe(200);
     expect(response.body.user).toMatchObject({ id: 1, name: 'Updated' });
     expect(response.body.token).toEqual(expect.any(String));
+    expect(DB.updateUser).toHaveBeenCalledWith(1, 'Updated', undefined, undefined);
 });
 
 test('allows an admin to update another account', async () => {
     const response = await request(app).put('/api/user/99').set('Authorization', `Bearer ${adminToken}`).send({ name: 'Updated' });
     expect(response.status).toBe(200);
     expect(response.body.user).toMatchObject({ id: 99, name: 'Updated' });
+    expect(DB.updateUser).toHaveBeenCalledWith(99, 'Updated', undefined, undefined);
 });
 
 test('prevents a diner from updating another account', async () => {
     const response = await request(app).put('/api/user/99').set('Authorization', `Bearer ${dinerToken}`).send({ name: 'Nope' });
     expect(response.status).toBe(403);
     expect(response.body.message).toBe('unauthorized');
+    expect(DB.updateUser).not.toHaveBeenCalled();
 });
 
 test('returns the user list placeholder', async () => {
