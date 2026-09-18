@@ -11,7 +11,8 @@ const DB = {
     getUser: jest.fn(async (email, password) => {
         const saved = users.get(email);
         if (!saved || saved.password !== password) throw Object.assign(new Error('unknown user'), { statusCode: 404 });
-        const { password: ignoredPassword, ...user } = saved;
+        const user = { ...saved };
+        delete user.password;
         return user;
     }),
     loginUser: jest.fn(async (userId, token) => tokens.add(token)),
