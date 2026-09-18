@@ -237,6 +237,19 @@ describe('database access', () => {
       expect(connection.commit).not.toHaveBeenCalled();
     });
 
+    test('commits all franchise deletes as one transaction', async () => {
+      connection.execute.mockResolvedValue([{}, []]);
+
+      await expect(DB.deleteFranchise(9)).resolves.toBeUndefined();
+      expect(connection.beginTransaction).toHaveBeenCalledTimes(1);
+      expect(connection.execute).toHaveBeenNthCalledWith(1, 'DELETE FROM store WHERE franchiseId=?', [9]);
+      expect(connection.execute).toHaveBeenNthCalledWith(2, 'DELETE FROM userRole WHERE objectId=?', [9]);
+      expect(connection.execute).toHaveBeenNthCalledWith(3, 'DELETE FROM franchise WHERE id=?', [9]);
+      expect(connection.commit).toHaveBeenCalledTimes(1);
+      expect(connection.rollback).not.toHaveBeenCalled();
+      expect(connection.end).toHaveBeenCalledTimes(1);
+    });
+
     test('returns a limited franchise page and marks additional results', async () => {
       const franchises = [{ id: 1, name: 'One' }, { id: 2, name: 'Two' }, { id: 3, name: 'Three' }];
       connection.execute.mockResolvedValueOnce([franchises, []]);
