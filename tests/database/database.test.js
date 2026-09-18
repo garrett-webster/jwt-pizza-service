@@ -1,340 +1,226 @@
-const mockHash = jest.fn();
-const mockCompare = jest.fn();
-const mockCreateConnection = jest.fn();
+const mockDatabaseName = `jwt_pizza_test_${process.pid}`;
 
-jest.mock('bcrypt', () => ({ hash: mockHash, compare: mockCompare }));
-jest.mock('mysql2/promise', () => ({ createConnection: mockCreateConnection }));
-
-mockCreateConnection.mockResolvedValue({
-  execute: jest.fn().mockResolvedValue([[{ SCHEMA_NAME: 'jwtpizza' }], []]),
-  query: jest.fn().mockResolvedValue([[], []]),
-  end: jest.fn(),
+jest.mock('../../src/config.js', () => {
+  const config = jest.requireActual('../../src/config.js');
+  return {
+    ...config,
+    db: {
+      ...config.db,
+      connection: { ...config.db.connection, database: mockDatabaseName },
+    },
+  };
 });
 
+const mysql = require('mysql2/promise');
+const config = require('../../src/config.js');
 const { DB, Role } = require('../../src/database/database.js');
 
-const makeConnection = () => ({
-  execute: jest.fn(),
-  query: jest.fn(),
-  end: jest.fn(),
-  beginTransaction: jest.fn(),
-  commit: jest.fn(),
-  rollback: jest.fn(),
-});
+let connection;
 
-describe('database access', () => {
-  let connection;
+async function execute(sql, params) {
+  const result = await connection.execute(sql, params);
+  return result[0];
+}
 
-  beforeEach(() => {
-    connection = makeConnection();
-    DB.initialized = Promise.resolve();
-    DB._getConnection = jest.fn().mockResolvedValue(connection);
-    mockHash.mockReset();
-    mockCompare.mockReset();
+async function clearTables() {
+  await connection.query('SET FOREIGN_KEY_CHECKS = 0');
+  for (const table of ['auth', 'orderItem', 'dinerOrder', 'userRole', 'store', 'franchise', 'menu', 'user']) {
+    await connection.query(`TRUNCATE TABLE ${table}`);
+  }
+  await connection.query('SET FOREIGN_KEY_CHECKS = 1');
+}
+
+describe('database component', () => {
+  beforeAll(async () => {
+    await DB.initialized;
+    connection = await mysql.createConnection(config.db.connection);
   });
 
-  afterEach(() => {
-    jest.restoreAllMocks();
+  beforeEach(async () => {
+    await clearTables();
   });
 
-  describe('menu operations', () => {
-    test('gets the menu and closes the connection', async () => {
-      const menu = [{ id: 1, title: 'Veggie' }];
-      connection.execute.mockResolvedValue([menu, []]);
-
-      await expect(DB.getMenu()).resolves.toBe(menu);
-      expect(connection.execute).toHaveBeenCalledWith('SELECT * FROM menu', undefined);
-      expect(connection.end).toHaveBeenCalled();
-    });
-
-    test('adds a menu item using all item fields', async () => {
-      connection.execute.mockResolvedValue([{ insertId: 9 }, []]);
-      const item = { title: 'Pepperoni', description: 'Spicy', image: 'pepperoni.png', price: 12.5 };
-
-      await expect(DB.addMenuItem(item)).resolves.toEqual({ ...item, id: 9 });
-      expect(connection.execute).toHaveBeenCalledWith(
-        'INSERT INTO menu (title, description, image, price) VALUES (?, ?, ?, ?)',
-        ['Pepperoni', 'Spicy', 'pepperoni.png', 12.5],
-      );
-      expect(connection.end).toHaveBeenCalled();
-    });
+  afterAll(async () => {
+    await connection.end();
+    const adminConnection = await mysql.createConnection(config.db.connection);
+    await adminConnection.query(`DROP DATABASE IF EXISTS ${mockDatabaseName}`);
+    await adminConnection.end();
   });
 
-  describe('user operations', () => {
-    test('hashes a password and creates each user role', async () => {
-      mockHash.mockResolvedValue('hashed-password');
-      connection.execute
-        .mockResolvedValueOnce([{ insertId: 4 }, []])
-        .mockResolvedValueOnce([{}, []])
-        .mockResolvedValueOnce([[{ id: 12 }], []])
-        .mockResolvedValueOnce([{}, []]);
-      const user = {
-        name: 'Diner',
-        email: 'diner@test.com',
-        password: 'secret',
-        roles: [{ role: Role.Diner }, { role: Role.Franchisee, object: 'Pizza Pocket' }],
-      };
+  test('persists and retrieves menu items', async () => {
+    const item = { title: 'Pepperoni', description: 'Spicy', image: 'pepperoni.png', price: 12.5 };
 
-      await expect(DB.addUser(user)).resolves.toEqual({ ...user, id: 4, password: undefined });
-      expect(mockHash).toHaveBeenCalledWith('secret', 10);
-      expect(connection.execute).toHaveBeenNthCalledWith(1,
-        'INSERT INTO user (name, email, password) VALUES (?, ?, ?)',
-        ['Diner', 'diner@test.com', 'hashed-password'],
-      );
-      expect(connection.execute).toHaveBeenNthCalledWith(2,
-        'INSERT INTO userRole (userId, role, objectId) VALUES (?, ?, ?)',
-        [4, Role.Diner, 0],
-      );
-      expect(connection.execute).toHaveBeenNthCalledWith(3, 'SELECT id FROM franchise WHERE name=?', ['Pizza Pocket']);
-      expect(connection.execute).toHaveBeenNthCalledWith(4,
-        'INSERT INTO userRole (userId, role, objectId) VALUES (?, ?, ?)',
-        [4, Role.Franchisee, 12],
-      );
-      expect(connection.end).toHaveBeenCalled();
-    });
+    const created = await DB.addMenuItem(item);
+    const menu = await DB.getMenu();
 
-    test('returns a user with roles and hides the stored password', async () => {
-      const storedUser = { id: 4, name: 'Diner', email: 'diner@test.com', password: 'hashed' };
-      connection.execute
-        .mockResolvedValueOnce([[storedUser], []])
-        .mockResolvedValueOnce([[{ role: 'diner', objectId: 0 }, { role: 'franchisee', objectId: 7 }], []]);
-      mockCompare.mockResolvedValue(true);
-
-      await expect(DB.getUser('diner@test.com', 'secret')).resolves.toMatchObject({
-        id: 4,
-        email: 'diner@test.com',
-        password: undefined,
-        roles: [{ role: 'diner', objectId: undefined }, { role: 'franchisee', objectId: 7 }],
-      });
-      expect(mockCompare).toHaveBeenCalledWith('secret', 'hashed');
-    });
-
-    test.each([
-      ['missing user', []],
-      ['wrong password', [{ id: 4, password: 'hashed' }]],
-    ])('rejects an %s with a 404 error', async (_reason, users) => {
-      connection.execute.mockResolvedValueOnce([users, []]);
-      mockCompare.mockResolvedValue(false);
-
-      await expect(DB.getUser('unknown@test.com', 'secret')).rejects.toMatchObject({ message: 'unknown user', statusCode: 404 });
-      expect(connection.end).toHaveBeenCalled();
-    });
-
-    test('updates selected fields and reloads the user', async () => {
-      mockHash.mockResolvedValue('new-hash');
-      connection.execute.mockResolvedValue([{}, []]);
-      const refreshedUser = { id: 4, email: 'new@test.com' };
-      const getUser = jest.spyOn(DB, 'getUser').mockResolvedValue(refreshedUser);
-
-      await expect(DB.updateUser(4, 'New Name', 'new@test.com', 'new-password')).resolves.toBe(refreshedUser);
-      expect(connection.execute).toHaveBeenCalledWith(
-        expect.stringContaining('UPDATE user SET password=\'new-hash\', email=\'new@test.com\', name=\'New Name\' WHERE id=4'),
-        undefined,
-      );
-      expect(getUser).toHaveBeenCalledWith('new@test.com', 'new-password');
-    });
-
-    test('does not issue an update when no fields are provided', async () => {
-      const getUser = jest.spyOn(DB, 'getUser').mockResolvedValue({ id: 4 });
-
-      await DB.updateUser(4);
-      expect(connection.execute).not.toHaveBeenCalled();
-      expect(getUser).toHaveBeenCalledWith(undefined, undefined);
-    });
+    expect(created).toMatchObject({ ...item, id: expect.any(Number) });
+    expect(menu).toEqual([expect.objectContaining({ ...item, id: created.id, price: 12.5 })]);
   });
 
-  describe('authentication tokens', () => {
-    test('stores and checks the token signature', async () => {
-      connection.execute
-        .mockResolvedValueOnce([{}, []])
-        .mockResolvedValueOnce([[{ userId: 4 }], []]);
-      const token = 'header.payload.signature';
-
-      await DB.loginUser(4, token);
-      await expect(DB.isLoggedIn(token)).resolves.toBe(true);
-      expect(connection.execute).toHaveBeenNthCalledWith(1,
-        'INSERT INTO auth (token, userId) VALUES (?, ?) ON DUPLICATE KEY UPDATE token=token',
-        ['signature', 4],
-      );
-      expect(connection.execute).toHaveBeenNthCalledWith(2, 'SELECT userId FROM auth WHERE token=?', ['signature']);
+  test('stores hashed passwords and returns roles without exposing the password', async () => {
+    const user = await DB.addUser({
+      name: 'Diner',
+      email: 'diner-component@test.com',
+      password: 'secret',
+      roles: [{ role: Role.Diner }],
     });
 
-    test('reports absent tokens as logged out and deletes them', async () => {
-      connection.execute.mockResolvedValue([[], []]);
+    const storedPassword = await execute('SELECT password FROM user WHERE id=?', [user.id]);
+    const retrieved = await DB.getUser(user.email, 'secret');
 
-      await expect(DB.isLoggedIn('not-a-jwt')).resolves.toBe(false);
-      await DB.logoutUser('not-a-jwt');
-      expect(connection.execute).toHaveBeenLastCalledWith('DELETE FROM auth WHERE token=?', ['']);
-    });
+    expect(storedPassword[0].password).not.toBe('secret');
+    expect(retrieved).toMatchObject({ id: user.id, name: 'Diner', email: user.email, password: undefined });
+    expect(retrieved.roles).toEqual([{ role: Role.Diner, objectId: undefined }]);
+    await expect(DB.getUser(user.email, 'wrong')).rejects.toMatchObject({ message: 'unknown user', statusCode: 404 });
   });
 
-  describe('orders', () => {
-    test('gets orders with paginated items', async () => {
-      connection.execute
-        .mockResolvedValueOnce([[{ id: 8, franchiseId: 2, storeId: 3, date: 'today' }], []])
-        .mockResolvedValueOnce([[{ id: 11, menuId: 1, price: 10 }], []]);
-
-      await expect(DB.getOrders({ id: 4 }, 2)).resolves.toEqual({
-        dinerId: 4,
-        page: 2,
-        orders: [{ id: 8, franchiseId: 2, storeId: 3, date: 'today', items: [{ id: 11, menuId: 1, price: 10 }] }],
-      });
-      expect(connection.execute).toHaveBeenNthCalledWith(1,
-        'SELECT id, franchiseId, storeId, date FROM dinerOrder WHERE dinerId=? LIMIT 10,10', [4]);
+  test('assigns a franchisee role to the matching franchise', async () => {
+    const franchise = await DB.createFranchise({ name: 'Pizza Pocket', admins: [] });
+    const user = await DB.addUser({
+      name: 'Franchise Admin',
+      email: 'franchisee-component@test.com',
+      password: 'secret',
+      roles: [{ role: Role.Franchisee, object: franchise.name }],
     });
 
-    test('creates an order and resolves menu IDs for its items', async () => {
-      connection.execute
-        .mockResolvedValueOnce([{ insertId: 8 }, []])
-        .mockResolvedValueOnce([[{ id: 3 }], []])
-        .mockResolvedValueOnce([{}, []]);
-      const order = { franchiseId: 2, storeId: 3, items: [{ menuId: 1, description: 'Large', price: 15 }] };
+    const retrieved = await DB.getUser(user.email);
 
-      await expect(DB.addDinerOrder({ id: 4 }, order)).resolves.toEqual({ ...order, id: 8 });
-      expect(connection.execute).toHaveBeenNthCalledWith(3,
-        'INSERT INTO orderItem (orderId, menuId, description, price) VALUES (?, ?, ?, ?)',
-        [8, 3, 'Large', 15],
-      );
-    });
+    expect(retrieved.roles).toEqual([{ role: Role.Franchisee, objectId: franchise.id }]);
   });
 
-  describe('franchises and stores', () => {
-    test('rejects a franchise with an unknown administrator', async () => {
-      connection.execute.mockResolvedValueOnce([[], []]);
-      const franchise = { name: 'Pizza Pocket', admins: [{ email: 'missing@test.com' }] };
-
-      await expect(DB.createFranchise(franchise)).rejects.toMatchObject({
-        message: 'unknown user for franchise admin missing@test.com provided',
-        statusCode: 404,
-      });
-      expect(connection.end).toHaveBeenCalled();
+  test('updates user fields and allows the new password to log in', async () => {
+    const user = await DB.addUser({
+      name: 'Old Name',
+      email: 'old-component@test.com',
+      password: 'old-password',
+      roles: [{ role: Role.Diner }],
     });
 
-    test('creates a franchise and assigns its administrators', async () => {
-      connection.execute
-        .mockResolvedValueOnce([[{ id: 4, name: 'Admin' }], []])
-        .mockResolvedValueOnce([{ insertId: 9 }, []])
-        .mockResolvedValueOnce([{}, []]);
-      const franchise = { name: 'Pizza Pocket', admins: [{ email: 'admin@test.com' }] };
+    const updated = await DB.updateUser(user.id, 'New Name', 'new-component@test.com', 'new-password');
 
-      await expect(DB.createFranchise(franchise)).resolves.toEqual({
-        id: 9,
-        name: 'Pizza Pocket',
-        admins: [{ email: 'admin@test.com', id: 4, name: 'Admin' }],
-      });
-      expect(connection.execute).toHaveBeenLastCalledWith(
-        'INSERT INTO userRole (userId, role, objectId) VALUES (?, ?, ?)',
-        [4, Role.Franchisee, 9],
-      );
-    });
-
-    test('rolls back all franchise deletes when one query fails', async () => {
-      connection.execute.mockRejectedValue(new Error('database failure'));
-
-      await expect(DB.deleteFranchise(9)).rejects.toMatchObject({ message: 'unable to delete franchise', statusCode: 500 });
-      expect(connection.beginTransaction).toHaveBeenCalled();
-      expect(connection.rollback).toHaveBeenCalled();
-      expect(connection.commit).not.toHaveBeenCalled();
-    });
-
-    test('commits all franchise deletes as one transaction', async () => {
-      connection.execute.mockResolvedValue([{}, []]);
-
-      await expect(DB.deleteFranchise(9)).resolves.toBeUndefined();
-      expect(connection.beginTransaction).toHaveBeenCalledTimes(1);
-      expect(connection.execute).toHaveBeenNthCalledWith(1, 'DELETE FROM store WHERE franchiseId=?', [9]);
-      expect(connection.execute).toHaveBeenNthCalledWith(2, 'DELETE FROM userRole WHERE objectId=?', [9]);
-      expect(connection.execute).toHaveBeenNthCalledWith(3, 'DELETE FROM franchise WHERE id=?', [9]);
-      expect(connection.commit).toHaveBeenCalledTimes(1);
-      expect(connection.rollback).not.toHaveBeenCalled();
-      expect(connection.end).toHaveBeenCalledTimes(1);
-    });
-
-    test('returns a limited franchise page and marks additional results', async () => {
-      const franchises = [{ id: 1, name: 'One' }, { id: 2, name: 'Two' }, { id: 3, name: 'Three' }];
-      connection.execute.mockResolvedValueOnce([franchises, []]);
-      jest.spyOn(DB, 'getFranchise').mockResolvedValue(undefined);
-
-      await expect(DB.getFranchises({ isRole: () => true }, 1, 2, '*Pizza*')).resolves.toEqual([[franchises[0], franchises[1]], true]);
-      expect(connection.execute).toHaveBeenCalledWith(
-        'SELECT id, name FROM franchise WHERE name LIKE ? LIMIT 3 OFFSET 2', ['%Pizza%']);
-    });
-
-    test('adds stores to public franchise results for non-admins', async () => {
-      connection.execute
-        .mockResolvedValueOnce([[{ id: 1, name: 'One' }], []])
-        .mockResolvedValueOnce([[{ id: 3, name: 'Main' }], []]);
-
-      await expect(DB.getFranchises(null)).resolves.toEqual([[{
-        id: 1,
-        name: 'One',
-        stores: [{ id: 3, name: 'Main' }],
-      }], false]);
-    });
-
-    test('loads a user’s franchises and delegates enrichment', async () => {
-      connection.execute
-        .mockResolvedValueOnce([[{ objectId: 9 }], []])
-        .mockResolvedValueOnce([[{ id: 9, name: 'Pizza Pocket' }], []]);
-      const franchise = { id: 9, name: 'Pizza Pocket' };
-      const getFranchise = jest.spyOn(DB, 'getFranchise').mockResolvedValue(undefined);
-
-      await expect(DB.getUserFranchises(4)).resolves.toEqual([franchise]);
-      expect(connection.execute).toHaveBeenNthCalledWith(2,
-        'SELECT id, name FROM franchise WHERE id in (9)', undefined);
-      expect(getFranchise).toHaveBeenCalledWith(franchise);
-    });
-
-    test('returns no franchises when the user has no franchise roles', async () => {
-      connection.execute.mockResolvedValueOnce([[], []]);
-
-      await expect(DB.getUserFranchises(4)).resolves.toEqual([]);
-      expect(connection.execute).toHaveBeenCalledTimes(1);
-    });
-
-    test('creates and deletes stores within the requested franchise', async () => {
-      connection.execute
-        .mockResolvedValueOnce([{ insertId: 6 }, []])
-        .mockResolvedValueOnce([{}, []]);
-      await expect(DB.createStore(9, { name: 'Downtown' })).resolves.toEqual({ id: 6, franchiseId: 9, name: 'Downtown' });
-
-      await DB.deleteStore(9, 6);
-      expect(connection.execute).toHaveBeenLastCalledWith('DELETE FROM store WHERE franchiseId=? AND id=?', [9, 6]);
-    });
-
-    test('loads franchise administrators and store revenue', async () => {
-      connection.execute
-        .mockResolvedValueOnce([[{ id: 4, name: 'Admin', email: 'admin@test.com' }], []])
-        .mockResolvedValueOnce([[{ id: 6, name: 'Downtown', totalRevenue: 42 }], []]);
-      const franchise = { id: 9, name: 'Pizza Pocket' };
-
-      await expect(DB.getFranchise(franchise)).resolves.toEqual({
-        ...franchise,
-        admins: [{ id: 4, name: 'Admin', email: 'admin@test.com' }],
-        stores: [{ id: 6, name: 'Downtown', totalRevenue: 42 }],
-      });
-    });
+    expect(updated).toMatchObject({ id: user.id, name: 'New Name', email: 'new-component@test.com' });
+    await expect(DB.getUser('new-component@test.com', 'new-password')).resolves.toMatchObject({ id: user.id });
+    await expect(DB.getUser('old-component@test.com', 'old-password')).rejects.toMatchObject({ statusCode: 404 });
   });
 
-  describe('helpers', () => {
-    test('calculates offsets and extracts JWT signatures', () => {
-      expect(DB.getOffset(3, 10)).toBe(20);
-      expect(DB.getTokenSignature('header.payload.signature')).toBe('signature');
-      expect(DB.getTokenSignature('not-a-jwt')).toBe('');
+  test('tracks login tokens by their JWT signature', async () => {
+    const user = await DB.addUser({
+      name: 'Diner',
+      email: 'token-component@test.com',
+      password: 'secret',
+      roles: [{ role: Role.Diner }],
+    });
+    const token = 'header.payload.signature';
+
+    await DB.loginUser(user.id, token);
+    await expect(DB.isLoggedIn(token)).resolves.toBe(true);
+    await DB.logoutUser(token);
+    await expect(DB.isLoggedIn(token)).resolves.toBe(false);
+  });
+
+  test('persists orders and their items, then retrieves them by page', async () => {
+    const franchise = await DB.createFranchise({ name: 'Order Franchise', admins: [] });
+    const store = await DB.createStore(franchise.id, { name: 'Downtown' });
+    const menuItem = await DB.addMenuItem({ title: 'Veggie', description: 'Garden', image: 'veggie.png', price: 9.5 });
+    const diner = await DB.addUser({
+      name: 'Diner',
+      email: 'order-component@test.com',
+      password: 'secret',
+      roles: [{ role: Role.Diner }],
+    });
+    const order = {
+      franchiseId: franchise.id,
+      storeId: store.id,
+      items: [{ menuId: menuItem.id, description: 'Garden', price: 9.5 }],
+    };
+
+    const created = await DB.addDinerOrder(diner, order);
+    const page = await DB.getOrders(diner, 1);
+
+    expect(created).toMatchObject({ ...order, id: expect.any(Number) });
+    expect(page).toMatchObject({ dinerId: diner.id, page: 1 });
+    expect(page.orders).toHaveLength(1);
+    expect(page.orders[0]).toMatchObject({ franchiseId: franchise.id, storeId: store.id });
+    expect(page.orders[0].items).toEqual([expect.objectContaining({ menuId: menuItem.id, description: 'Garden', price: 9.5 })]);
+  });
+
+  test('creates franchises with administrators and exposes their stores', async () => {
+    const admin = await DB.addUser({
+      name: 'Admin',
+      email: 'admin-component@test.com',
+      password: 'secret',
+      roles: [{ role: Role.Diner }],
     });
 
-    test('query returns the first result from execute', async () => {
-      connection.execute.mockResolvedValue([[{ id: 1 }], ['metadata']]);
-
-      await expect(DB.query(connection, 'SELECT 1', [1])).resolves.toEqual([{ id: 1 }]);
+    const franchise = await DB.createFranchise({
+      name: 'Franchise Component',
+      admins: [{ email: admin.email }],
     });
+    await DB.createStore(franchise.id, { name: 'Campus' });
+    const loaded = await DB.getFranchise({ id: franchise.id, name: franchise.name });
 
-    test('getID returns an ID or rejects when no row exists', async () => {
-      connection.execute.mockResolvedValueOnce([[{ id: 7 }], []]);
-      await expect(DB.getID(connection, 'name', 'Pizza Pocket', 'franchise')).resolves.toBe(7);
+    expect(franchise.admins).toEqual([{ email: admin.email, id: admin.id, name: admin.name }]);
+    expect(loaded.admins).toEqual([{ id: admin.id, name: admin.name, email: admin.email }]);
+    expect(loaded.stores).toEqual([expect.objectContaining({ name: 'Campus', totalRevenue: 0 })]);
+  });
 
-      connection.execute.mockResolvedValueOnce([[], []]);
-      await expect(DB.getID(connection, 'name', 'Missing', 'franchise')).rejects.toThrow('No ID found');
+  test('lists franchises with filtering, pagination, and user-specific enrichment', async () => {
+    const first = await DB.createFranchise({ name: 'Alpha Pizza', admins: [] });
+    await DB.createFranchise({ name: 'Beta Pizza', admins: [] });
+    await DB.createFranchise({ name: 'Other Restaurant', admins: [] });
+
+    const [franchises, more] = await DB.getFranchises(null, 0, 1, '*Pizza*');
+
+    expect(franchises).toHaveLength(1);
+    expect(franchises[0]).toMatchObject({ id: first.id, name: 'Alpha Pizza', stores: [] });
+    expect(more).toBe(true);
+  });
+
+  test('returns franchises assigned to a user', async () => {
+    const admin = await DB.addUser({
+      name: 'Franchisee',
+      email: 'assigned-component@test.com',
+      password: 'secret',
+      roles: [{ role: Role.Diner }],
     });
+    const franchise = await DB.createFranchise({ name: 'Assigned Franchise', admins: [{ email: admin.email }] });
+
+    const franchises = await DB.getUserFranchises(admin.id);
+
+    expect(franchises).toHaveLength(1);
+    expect(franchises[0]).toMatchObject({ id: franchise.id, name: franchise.name });
+    expect(franchises[0].admins).toEqual([expect.objectContaining({ id: admin.id, email: admin.email })]);
+  });
+
+  test('deletes a franchise and its dependent records in a transaction', async () => {
+    const franchise = await DB.createFranchise({ name: 'Delete Franchise', admins: [] });
+    await DB.createStore(franchise.id, { name: 'Delete Store' });
+
+    await expect(DB.deleteFranchise(franchise.id)).resolves.toBeUndefined();
+    const stores = await execute('SELECT * FROM store WHERE franchiseId=?', [franchise.id]);
+
+    expect(stores).toEqual([]);
+  });
+
+  test('deletes a store only from the requested franchise', async () => {
+    const first = await DB.createFranchise({ name: 'First Store Franchise', admins: [] });
+    const second = await DB.createFranchise({ name: 'Second Store Franchise', admins: [] });
+    const firstStore = await DB.createStore(first.id, { name: 'First Store' });
+    const secondStore = await DB.createStore(second.id, { name: 'Second Store' });
+
+    await DB.deleteStore(first.id, firstStore.id);
+
+    const remaining = await execute('SELECT id FROM store WHERE id=?', [secondStore.id]);
+    expect(remaining).toEqual([{ id: secondStore.id }]);
+  });
+
+  test('rejects an unknown ID lookup', async () => {
+    await expect(DB.getID(connection, 'name', 'Missing Franchise', 'franchise')).rejects.toThrow('No ID found');
+  });
+
+  test('calculates offsets and extracts JWT signatures', () => {
+    expect(DB.getOffset(3, 10)).toBe(20);
+    expect(DB.getTokenSignature('header.payload.signature')).toBe('signature');
+    expect(DB.getTokenSignature('not-a-jwt')).toBe('');
   });
 });

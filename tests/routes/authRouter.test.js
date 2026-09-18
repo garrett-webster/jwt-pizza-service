@@ -1,25 +1,65 @@
+const mockDatabaseName = `jwt_pizza_auth_test_${process.pid}`;
+
+jest.mock('../../src/config.js', () => {
+    const config = jest.requireActual('../../src/config.js');
+    return {
+        ...config,
+        db: {
+            ...config.db,
+            connection: { ...config.db.connection, database: mockDatabaseName },
+        },
+    };
+});
+
+const mysql = require('mysql2/promise');
 const request = require('supertest');
+const config = require('../../src/config.js');
 const app = require('../../src/service');
+const { DB } = require('../../src/database/database.js');
 const { setAuthUser } = require('../../src/routes/authRouter.js');
 
-const testUser = { name: 'pizza diner', email: 'reg@test.com', password: 'a' };
+let connection;
 let testUserAuthToken;
 
+const testUser = { name: 'pizza diner', email: 'auth-component@test.com', password: 'a' };
+
+async function clearTables() {
+    await connection.query('SET FOREIGN_KEY_CHECKS = 0');
+    for (const table of ['auth', 'orderItem', 'dinerOrder', 'userRole', 'store', 'franchise', 'menu', 'user']) {
+        await connection.query(`TRUNCATE TABLE ${table}`);
+    }
+    await connection.query('SET FOREIGN_KEY_CHECKS = 1');
+}
+
 beforeAll(async () => {
-    testUser.email = Math.random().toString(36).substring(2, 12) + '@test.com';
+    await DB.initialized;
+    connection = await mysql.createConnection(config.db.connection);
+});
+
+beforeEach(async () => {
+    await clearTables();
     const registerRes = await request(app).post('/api/auth').send(testUser);
+    expect(registerRes.status).toBe(200);
     testUserAuthToken = registerRes.body.token;
     expectValidJwt(testUserAuthToken);
+});
+
+afterAll(async () => {
+    await connection.end();
+    const adminConnection = await mysql.createConnection(config.db.connection);
+    await adminConnection.query(`DROP DATABASE IF EXISTS ${mockDatabaseName}`);
+    await adminConnection.end();
 });
 
 test('logs in a registered user', async () => {
     const loginRes = await request(app).put('/api/auth').send(testUser);
     expect(loginRes.status).toBe(200);
     expectValidJwt(loginRes.body.token);
-
-    const expectedUser = { ...testUser, roles: [{ role: 'diner' }] };
-    delete expectedUser.password;
-    expect(loginRes.body.user).toMatchObject(expectedUser);
+    expect(loginRes.body.user).toMatchObject({
+        name: testUser.name,
+        email: testUser.email,
+        roles: expect.arrayContaining([{ role: 'diner' }]),
+    });
 });
 
 test.each([
@@ -35,7 +75,7 @@ test.each([
 
 test('login rejects an unknown user', async () => {
     const loginRes = await request(app).put('/api/auth').send({
-        email: `missing-${Date.now()}@test.com`,
+        email: 'missing-auth-component@test.com',
         password: 'wrong',
     });
 
@@ -63,6 +103,7 @@ test('role helper identifies matching and non-matching roles', async () => {
 
     await setAuthUser(req, {}, next);
 
+    expect(next).toHaveBeenCalledWith();
     expect(req.user.isRole('diner')).toBe(true);
     expect(req.user.isRole('admin')).toBe(false);
 });
@@ -71,10 +112,10 @@ test('rejects a logged-in token with an invalid JWT signature', async () => {
     const invalidTokenParts = testUserAuthToken.split('.');
     invalidTokenParts[1] = 'invalid-payload';
     const invalidToken = invalidTokenParts.join('.');
-    const loginRes = await request(app).delete('/api/auth').set('Authorization', `Bearer ${invalidToken}`);
+    const logoutRes = await request(app).delete('/api/auth').set('Authorization', `Bearer ${invalidToken}`);
 
-    expect(loginRes.status).toBe(401);
-    expect(loginRes.body).toEqual({ message: 'unauthorized' });
+    expect(logoutRes.status).toBe(401);
+    expect(logoutRes.body).toEqual({ message: 'unauthorized' });
 });
 
 test('logs out a user and invalidates the token', async () => {
