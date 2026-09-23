@@ -41,10 +41,11 @@ describe('database component', () => {
   });
 
   afterAll(async () => {
-    await connection.end();
-    const adminConnection = await mysql.createConnection(config.db.connection);
-    await adminConnection.query(`DROP DATABASE IF EXISTS ${mockDatabaseName}`);
-    await adminConnection.end();
+    try {
+      if (connection) await connection.end();
+    } finally {
+      await DB.dropDatabase();
+    }
   });
 
   test('persists and retrieves menu items', async () => {

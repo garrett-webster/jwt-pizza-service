@@ -5,7 +5,8 @@ const { StatusCodeError } = require('../endpointHelper.js');
 const { Role } = require('../model/model.js');
 const dbModel = require('./dbModel.js');
 class DB {
-  constructor() {
+  constructor(dbConfig = config.db) {
+    this.dbConfig = dbConfig;
     this.initialized = this.initializeDatabase();
   }
 
@@ -133,8 +134,8 @@ class DB {
   async getOrders(user, page = 1) {
     const connection = await this.getConnection();
     try {
-      const offset = this.getOffset(page, config.db.listPerPage);
-      const orders = await this.query(connection, `SELECT id, franchiseId, storeId, date FROM dinerOrder WHERE dinerId=? LIMIT ${offset},${config.db.listPerPage}`, [user.id]);
+      const offset = this.getOffset(page, this.dbConfig.listPerPage);
+      const orders = await this.query(connection, `SELECT id, franchiseId, storeId, date FROM dinerOrder WHERE dinerId=? LIMIT ${offset},${this.dbConfig.listPerPage}`, [user.id]);
       for (const order of orders) {
         let items = await this.query(connection, `SELECT id, menuId, description, price FROM orderItem WHERE orderId=?`, [order.id]);
         order.items = items;
@@ -313,17 +314,32 @@ class DB {
   }
 
   async _getConnection(setUse = true) {
+    const { connection: dbConnection } = this.dbConfig;
     const connection = await mysql.createConnection({
-      host: config.db.connection.host,
-      user: config.db.connection.user,
-      password: config.db.connection.password,
-      connectTimeout: config.db.connection.connectTimeout,
+      host: dbConnection.host,
+      user: dbConnection.user,
+      password: dbConnection.password,
+      connectTimeout: dbConnection.connectTimeout,
       decimalNumbers: true,
     });
     if (setUse) {
-      await connection.query(`USE ${config.db.connection.database}`);
+      await connection.query(`USE ${this.databaseName}`);
     }
     return connection;
+  }
+
+  get databaseName() {
+    return this.dbConfig.connection.database;
+  }
+
+  async dropDatabase() {
+    await this.initialized;
+    const connection = await this._getConnection(false);
+    try {
+      await connection.query(`DROP DATABASE IF EXISTS ${this.databaseName}`);
+    } finally {
+      await connection.end();
+    }
   }
 
   async initializeDatabase() {
@@ -333,8 +349,8 @@ class DB {
         const dbExists = await this.checkDatabaseExists(connection);
         console.log(dbExists ? 'Database exists' : 'Database does not exist, creating it');
 
-        await connection.query(`CREATE DATABASE IF NOT EXISTS ${config.db.connection.database}`);
-        await connection.query(`USE ${config.db.connection.database}`);
+        await connection.query(`CREATE DATABASE IF NOT EXISTS ${this.databaseName}`);
+        await connection.query(`USE ${this.databaseName}`);
 
         if (!dbExists) {
           console.log('Successfully created database');
@@ -352,15 +368,19 @@ class DB {
         connection.end();
       }
     } catch (err) {
-      console.error(JSON.stringify({ message: 'Error initializing database', exception: err.message, connection: config.db.connection }));
+      console.error(JSON.stringify({ message: 'Error initializing database', exception: err.message, connection: this.dbConfig.connection }));
     }
   }
 
   async checkDatabaseExists(connection) {
-    const [rows] = await connection.execute(`SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = ?`, [config.db.connection.database]);
+    const [rows] = await connection.execute(`SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = ?`, [this.databaseName]);
     return rows.length > 0;
   }
 }
 
-const db = new DB();
-module.exports = { Role, DB: db };
+function createDatabase(dbConfig = config.db) {
+  return new DB(dbConfig);
+}
+
+const db = createDatabase();
+module.exports = { Role, DB: db, Database: DB, createDatabase };
