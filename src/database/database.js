@@ -33,27 +33,31 @@ class DB {
   async addUser(user) {
     const connection = await this.getConnection();
     try {
-      const hashedPassword = await bcrypt.hash(user.password, 10);
-
-      const userResult = await this.query(connection, `INSERT INTO user (name, email, password) VALUES (?, ?, ?)`, [user.name, user.email, hashedPassword]);
-      const userId = userResult.insertId;
-      for (const role of user.roles) {
-        switch (role.role) {
-          case Role.Franchisee: {
-            const franchiseId = await this.getID(connection, 'name', role.object, 'franchise');
-            await this.query(connection, `INSERT INTO userRole (userId, role, objectId) VALUES (?, ?, ?)`, [userId, role.role, franchiseId]);
-            break;
-          }
-          default: {
-            await this.query(connection, `INSERT INTO userRole (userId, role, objectId) VALUES (?, ?, ?)`, [userId, role.role, 0]);
-            break;
-          }
-        }
-      }
-      return { ...user, id: userId, password: undefined };
+      return await this._addUser(connection, user);
     } finally {
       connection.end();
     }
+  }
+
+  async _addUser(connection, user) {
+    const hashedPassword = await bcrypt.hash(user.password, 10);
+
+    const userResult = await this.query(connection, `INSERT INTO user (name, email, password) VALUES (?, ?, ?)`, [user.name, user.email, hashedPassword]);
+    const userId = userResult.insertId;
+    for (const role of user.roles) {
+      switch (role.role) {
+        case Role.Franchisee: {
+          const franchiseId = await this.getID(connection, 'name', role.object, 'franchise');
+          await this.query(connection, `INSERT INTO userRole (userId, role, objectId) VALUES (?, ?, ?)`, [userId, role.role, franchiseId]);
+          break;
+        }
+        default: {
+          await this.query(connection, `INSERT INTO userRole (userId, role, objectId) VALUES (?, ?, ?)`, [userId, role.role, 0]);
+          break;
+        }
+      }
+    }
+    return { ...user, id: userId, password: undefined };
   }
 
   async getUser(email, password) {
@@ -362,7 +366,7 @@ class DB {
 
         if (!dbExists) {
           const defaultAdmin = { name: '常用名字', email: 'a@jwt.com', password: 'admin', roles: [{ role: Role.Admin }] };
-          this.addUser(defaultAdmin);
+          await this._addUser(connection, defaultAdmin);
         }
       } finally {
         connection.end();
