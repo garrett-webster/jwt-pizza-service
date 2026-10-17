@@ -15,6 +15,7 @@ const DB = {
         delete user.password;
         return user;
     }),
+    getUsers: jest.fn(async () => [[{ id: 1, name: 'Diner', email: 'diner-user@test.com', roles: [{ role: 'diner' }] }], false]),
     loginUser: jest.fn(async (userId, token) => tokens.add(token)),
     isLoggedIn: jest.fn(async (token) => tokens.has(token)),
     logoutUser: jest.fn(async (token) => tokens.delete(token)),

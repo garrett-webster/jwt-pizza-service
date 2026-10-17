@@ -177,6 +177,92 @@ describe('database component', () => {
     expect(more).toBe(true);
   });
 
+  test('lists users with roles, filtering, and pagination', async () => {
+    const alice = await DB.addUser({ name: 'Alice List', email: 'alice-list@test.com', password: 'secret', roles: [{ role: Role.Admin }] });
+    const bob = await DB.addUser({ name: 'Bob List', email: 'bob-list@test.com', password: 'secret', roles: [{ role: Role.Diner }] });
+    await DB.addUser({ name: 'Carol Other', email: 'carol-list@test.com', password: 'secret', roles: [{ role: Role.Diner }] });
+
+    const [firstPage, more] = await DB.getUsers(1, 1, '*List*');
+    expect(firstPage).toEqual([{ id: alice.id, name: 'Alice List', email: 'alice-list@test.com', roles: [{ role: Role.Admin }] }]);
+    expect(more).toBe(true);
+
+    const [secondPage, moreAfter] = await DB.getUsers(2, 1, '*List*');
+    expect(secondPage).toMatchObject([{ id: bob.id, name: 'Bob List' }]);
+    expect(moreAfter).toBe(false);
+    expect(firstPage[0]).not.toHaveProperty('password');
+  });
+
+  describe('user list pagination', () => {
+    let ids;
+
+    beforeEach(async () => {
+      ids = [];
+      for (let i = 1; i <= 5; i++) {
+        const user = await DB.addUser({ name: `Paged ${i}`, email: `paged-${i}@test.com`, password: 'secret', roles: [{ role: Role.Diner }] });
+        ids.push(user.id);
+      }
+    });
+
+    test('splits users across pages in id order and reports whether more remain', async () => {
+      const [first, firstMore] = await DB.getUsers(1, 2, '*');
+      const [second, secondMore] = await DB.getUsers(2, 2, '*');
+      const [third, thirdMore] = await DB.getUsers(3, 2, '*');
+
+      expect(first.map((u) => u.id)).toEqual([ids[0], ids[1]]);
+      expect(firstMore).toBe(true);
+      expect(second.map((u) => u.id)).toEqual([ids[2], ids[3]]);
+      expect(secondMore).toBe(true);
+      expect(third.map((u) => u.id)).toEqual([ids[4]]);
+      expect(thirdMore).toBe(false);
+    });
+
+    test('reports no more users when the result count equals the limit', async () => {
+      const [users, more] = await DB.getUsers(1, 5, '*');
+
+      expect(users.map((u) => u.id)).toEqual(ids);
+      expect(more).toBe(false);
+    });
+
+    test('returns an empty page past the end of the results', async () => {
+      const [users, more] = await DB.getUsers(4, 2, '*');
+
+      expect(users).toEqual([]);
+      expect(more).toBe(false);
+    });
+
+    test('paginates within a name filter', async () => {
+      const [users, more] = await DB.getUsers(2, 2, 'Paged*');
+
+      expect(users.map((u) => u.id)).toEqual([ids[2], ids[3]]);
+      expect(more).toBe(true);
+    });
+
+    test('uses page 1, limit 10, and no name filter by default', async () => {
+      const [users, more] = await DB.getUsers();
+
+      expect(users.map((u) => u.id)).toEqual(ids);
+      expect(more).toBe(false);
+    });
+
+    test.each([
+      ['non-numeric', 'abc', 'xyz'],
+      ['zero', 0, 0],
+      ['negative', -3, -2],
+    ])('falls back to page 1 and limit 10 for %s page and limit', async (_label, page, limit) => {
+      const [users, more] = await DB.getUsers(page, limit, '*');
+
+      expect(users.map((u) => u.id)).toEqual(ids);
+      expect(more).toBe(false);
+    });
+
+    test('accepts page and limit as query-string values', async () => {
+      const [users, more] = await DB.getUsers('2', '2', '*');
+
+      expect(users.map((u) => u.id)).toEqual([ids[2], ids[3]]);
+      expect(more).toBe(true);
+    });
+  });
+
   test('returns franchises assigned to a user', async () => {
     const admin = await DB.addUser({
       name: 'Franchisee',

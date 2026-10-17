@@ -54,12 +54,31 @@ test('prevents a diner from updating another account', async () => {
     expect(DB.updateUser).not.toHaveBeenCalled();
 });
 
-test('returns the user list placeholder', async () => {
-    const list = await request(app).get('/api/user').set('Authorization', `Bearer ${dinerToken}`);
-    expect(list.body).toEqual({ message: 'not implemented', users: [], more: false });
-});
-
 test('returns the delete user placeholder', async () => {
     const deleted = await request(app).delete('/api/user/99').set('Authorization', `Bearer ${dinerToken}`);
     expect(deleted.body).toEqual({ message: 'not implemented' });
+});
+
+test('list users returns the users for an admin', async () => {
+    const listUsersRes = await request(app).get('/api/user?page=2&limit=5&name=Di*').set('Authorization', `Bearer ${adminToken}`);
+    expect(listUsersRes.status).toBe(200);
+    expect(listUsersRes.body).toEqual({
+        users: [{ id: 1, name: 'Diner', email: 'diner-user@test.com', roles: [{ role: 'diner' }] }],
+        more: false,
+    });
+    expect(DB.getUsers).toHaveBeenCalledWith('2', '5', 'Di*');
+});
+
+test('list users forbids a non-admin', async () => {
+    const listUsersRes = await request(app).get('/api/user').set('Authorization', `Bearer ${dinerToken}`);
+    expect(listUsersRes.status).toBe(403);
+    expect(listUsersRes.body.message).toBe('unauthorized');
+    expect(DB.getUsers).not.toHaveBeenCalled();
+});
+
+test('list users fails without authentication', async () => {
+    const listUsersRes = await request(app).get('/api/user');
+    expect(listUsersRes.status).toBe(401);
+    expect(listUsersRes.body.message).toBe('unauthorized');
+    expect(DB.getUsers).not.toHaveBeenCalled();
 });
