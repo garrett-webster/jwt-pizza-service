@@ -104,6 +104,36 @@ class DB {
     }
   }
 
+  async deleteUser(userId) {
+    const connection = await this.getConnection();
+    try {
+      const existing = await this.query(connection, `SELECT id FROM user WHERE id=?`, [userId]);
+      if (existing.length === 0) {
+        throw new StatusCodeError('unknown user', 404);
+      }
+
+      await connection.beginTransaction();
+      try {
+        const admins = await this.query(connection, `SELECT DISTINCT userId FROM userRole WHERE role=? FOR UPDATE`, [Role.Admin]);
+        if (admins.length === 1 && admins[0].userId === Number(userId)) {
+          await connection.rollback();
+          throw new StatusCodeError('unable to delete the last admin', 403);
+        }
+
+        await this.query(connection, `DELETE FROM auth WHERE userId=?`, [userId]);
+        await this.query(connection, `DELETE FROM userRole WHERE userId=?`, [userId]);
+        await this.query(connection, `DELETE FROM user WHERE id=?`, [userId]);
+        await connection.commit();
+      } catch (e) {
+        if (e instanceof StatusCodeError) throw e;
+        await connection.rollback();
+        throw new StatusCodeError('unable to delete user', 500);
+      }
+    } finally {
+      connection.end();
+    }
+  }
+
   async getUsers(page = 1, limit = 10, nameFilter = '*') {
     page = Number.parseInt(page) >= 1 ? Number.parseInt(page) : 1;
     limit = Number.parseInt(limit) >= 1 ? Number.parseInt(limit) : 10;

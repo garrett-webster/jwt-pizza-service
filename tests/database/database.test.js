@@ -263,6 +263,105 @@ describe('database component', () => {
     });
   });
 
+  describe('deleteUser', () => {
+    async function addDiner(name, email) {
+      return DB.addUser({ name, email, password: 'secret', roles: [{ role: Role.Diner }] });
+    }
+
+    test('removes the user so they can no longer be found or log in', async () => {
+      const user = await addDiner('Delete Me', 'delete-me@test.com');
+
+      await expect(DB.deleteUser(user.id)).resolves.toBeUndefined();
+
+      expect(await execute('SELECT id FROM user WHERE id=?', [user.id])).toEqual([]);
+      await expect(DB.getUser(user.email, 'secret')).rejects.toMatchObject({ statusCode: 404 });
+    });
+
+    test('removes the roles of the deleted user, including franchise roles', async () => {
+      const user = await addDiner('Franchisee Delete', 'franchisee-delete@test.com');
+      const franchise = await DB.createFranchise({ name: 'Delete Roles Franchise', admins: [{ email: user.email }] });
+
+      await DB.deleteUser(user.id);
+
+      expect(await execute('SELECT id FROM userRole WHERE userId=?', [user.id])).toEqual([]);
+      expect(await execute('SELECT id FROM franchise WHERE id=?', [franchise.id])).toHaveLength(1);
+    });
+
+    test('removes the sessions of the deleted user', async () => {
+      const user = await addDiner('Session Delete', 'session-delete@test.com');
+      await DB.loginUser(user.id, 'header.payload.signature-delete');
+      expect(await DB.isLoggedIn('header.payload.signature-delete')).toBe(true);
+
+      await DB.deleteUser(user.id);
+
+      expect(await DB.isLoggedIn('header.payload.signature-delete')).toBe(false);
+      expect(await execute('SELECT token FROM auth WHERE userId=?', [user.id])).toEqual([]);
+    });
+
+    test('keeps the order history of the deleted user', async () => {
+      const user = await addDiner('Order Delete', 'order-delete@test.com');
+      await execute('INSERT INTO dinerOrder (dinerId, franchiseId, storeId, date) VALUES (?, 1, 1, NOW())', [user.id]);
+
+      await DB.deleteUser(user.id);
+
+      expect(await execute('SELECT id FROM dinerOrder WHERE dinerId=?', [user.id])).toHaveLength(1);
+    });
+
+    test('rejects with a 404 when the user does not exist', async () => {
+      await expect(DB.deleteUser(99999)).rejects.toMatchObject({ message: 'unknown user', statusCode: 404 });
+    });
+
+    test('rejects with a 404 when the user was already deleted', async () => {
+      const user = await addDiner('Twice Delete', 'twice-delete@test.com');
+      await DB.deleteUser(user.id);
+
+      await expect(DB.deleteUser(user.id)).rejects.toMatchObject({ statusCode: 404 });
+    });
+
+    test('refuses to delete the last admin', async () => {
+      const admin = await DB.addUser({ name: 'Only Admin', email: 'only-admin@test.com', password: 'secret', roles: [{ role: Role.Admin }] });
+
+      await expect(DB.deleteUser(admin.id)).rejects.toMatchObject({ message: 'unable to delete the last admin', statusCode: 403 });
+
+      await expect(DB.getUser(admin.email, 'secret')).resolves.toMatchObject({ id: admin.id, roles: [{ role: Role.Admin }] });
+    });
+
+    test('keeps the last admin sessions when deletion is refused', async () => {
+      const admin = await DB.addUser({ name: 'Session Admin', email: 'session-admin@test.com', password: 'secret', roles: [{ role: Role.Admin }] });
+      await DB.loginUser(admin.id, 'header.payload.signature-admin');
+
+      await expect(DB.deleteUser(admin.id)).rejects.toMatchObject({ statusCode: 403 });
+
+      expect(await DB.isLoggedIn('header.payload.signature-admin')).toBe(true);
+    });
+
+    test('allows deleting an admin when another admin remains', async () => {
+      const first = await DB.addUser({ name: 'First Admin', email: 'first-admin@test.com', password: 'secret', roles: [{ role: Role.Admin }] });
+      const second = await DB.addUser({ name: 'Second Admin', email: 'second-admin@test.com', password: 'secret', roles: [{ role: Role.Admin }] });
+
+      await expect(DB.deleteUser(first.id)).resolves.toBeUndefined();
+
+      await expect(DB.getUser(second.email, 'secret')).resolves.toMatchObject({ id: second.id });
+      await expect(DB.deleteUser(second.id)).rejects.toMatchObject({ statusCode: 403 });
+    });
+
+    test('allows deleting a non-admin when only one admin exists', async () => {
+      await DB.addUser({ name: 'Lone Admin', email: 'lone-admin@test.com', password: 'secret', roles: [{ role: Role.Admin }] });
+      const diner = await addDiner('Plain Diner', 'plain-diner@test.com');
+
+      await expect(DB.deleteUser(diner.id)).resolves.toBeUndefined();
+    });
+
+    test('removes the user from the user list', async () => {
+      const user = await addDiner('Listed Delete', 'listed-delete@test.com');
+      await DB.deleteUser(user.id);
+
+      const [users] = await DB.getUsers(1, 10, '*');
+
+      expect(users.map((u) => u.id)).not.toContain(user.id);
+    });
+  });
+
   test('returns franchises assigned to a user', async () => {
     const admin = await DB.addUser({
       name: 'Franchisee',

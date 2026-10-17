@@ -54,9 +54,54 @@ test('prevents a diner from updating another account', async () => {
     expect(DB.updateUser).not.toHaveBeenCalled();
 });
 
-test('returns the delete user placeholder', async () => {
-    const deleted = await request(app).delete('/api/user/99').set('Authorization', `Bearer ${dinerToken}`);
-    expect(deleted.body).toEqual({ message: 'not implemented' });
+describe('delete user', () => {
+    test('requires authentication', async () => {
+        const response = await request(app).delete('/api/user/1');
+        expect(response.status).toBe(401);
+        expect(response.body.message).toBe('unauthorized');
+        expect(DB.deleteUser).not.toHaveBeenCalled();
+    });
+
+    test('allows a user to delete their own account', async () => {
+        const response = await request(app).delete('/api/user/1').set('Authorization', `Bearer ${dinerToken}`);
+        expect(response.status).toBe(200);
+        expect(response.body).toEqual({ message: 'user deleted' });
+        expect(DB.deleteUser).toHaveBeenCalledWith(1);
+    });
+
+    test('allows an admin to delete another account', async () => {
+        const response = await request(app).delete('/api/user/99').set('Authorization', `Bearer ${adminToken}`);
+        expect(response.status).toBe(200);
+        expect(response.body).toEqual({ message: 'user deleted' });
+        expect(DB.deleteUser).toHaveBeenCalledWith(99);
+    });
+
+    test('prevents a diner from deleting another account', async () => {
+        const response = await request(app).delete('/api/user/99').set('Authorization', `Bearer ${dinerToken}`);
+        expect(response.status).toBe(403);
+        expect(response.body.message).toBe('unauthorized');
+        expect(DB.deleteUser).not.toHaveBeenCalled();
+    });
+
+    test('returns 404 when the user does not exist', async () => {
+        DB.deleteUser.mockRejectedValueOnce(Object.assign(new Error('unknown user'), { statusCode: 404 }));
+        const response = await request(app).delete('/api/user/12345').set('Authorization', `Bearer ${adminToken}`);
+        expect(response.status).toBe(404);
+        expect(response.body.message).toBe('unknown user');
+    });
+
+    test('returns 403 when the user is the last admin', async () => {
+        DB.deleteUser.mockRejectedValueOnce(Object.assign(new Error('unable to delete the last admin'), { statusCode: 403 }));
+        const response = await request(app).delete('/api/user/2').set('Authorization', `Bearer ${adminToken}`);
+        expect(response.status).toBe(403);
+        expect(response.body.message).toBe('unable to delete the last admin');
+    });
+
+    test('rejects a non-numeric user id', async () => {
+        const response = await request(app).delete('/api/user/abc').set('Authorization', `Bearer ${adminToken}`);
+        expect(response.status).toBe(400);
+        expect(DB.deleteUser).not.toHaveBeenCalled();
+    });
 });
 
 test('list users returns the users for an admin', async () => {
