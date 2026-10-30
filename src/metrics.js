@@ -6,6 +6,7 @@ const requests = {};
 let latencyTotalMs = 0;
 let latencyCount = 0;
 const authAttempts = { success: 0, failure: 0 };
+const pizzas = { sold: 0, failures: 0, revenue: 0, latencyTotalMs: 0, latencyCount: 0 };
 const ACTIVE_USER_WINDOW_MS = 5 * 60 * 1000;
 const activeUsers = new Map(); // userId -> last seen (ms)
 
@@ -22,6 +23,18 @@ function requestTracker(req, res, next) {
     }
   });
   next();
+}
+
+// Called by the order router after the factory responds
+function pizzaPurchase(success, latencyMs, pizzaCount, revenue) {
+  if (success) {
+    pizzas.sold += pizzaCount;
+    pizzas.revenue += revenue;
+  } else {
+    pizzas.failures++;
+  }
+  pizzas.latencyTotalMs += latencyMs;
+  pizzas.latencyCount++;
 }
 
 // This will periodically send metrics to Grafana
@@ -41,6 +54,15 @@ setInterval(() => {
   });
   metrics.push(createMetric('activeUsers', activeUsers.size, '{users}', 'gauge', 'asInt'));
 
+  metrics.push(createMetric('pizzasSold', pizzas.sold, '1', 'sum', 'asInt'));
+  metrics.push(createMetric('pizzaCreationFailures', pizzas.failures, '1', 'sum', 'asInt'));
+  metrics.push(createMetric('revenue', pizzas.revenue, '1', 'sum', 'asDouble'));
+  if (pizzas.latencyCount > 0) {
+    metrics.push(createMetric('pizzaCreationLatency', pizzas.latencyTotalMs / pizzas.latencyCount, 'ms', 'gauge', 'asDouble'));
+    pizzas.latencyTotalMs = 0;
+    pizzas.latencyCount = 0;
+  }
+
   // Average service endpoint latency since the last report
   if (latencyCount > 0) {
     metrics.push(createMetric('serviceLatency', latencyTotalMs / latencyCount, 'ms', 'gauge', 'asDouble'));
@@ -52,7 +74,7 @@ setInterval(() => {
   metrics.push(createMetric('memoryUsagePercentage', getMemoryUsagePercentage(), '%', 'gauge', 'asDouble'));
 
   sendMetricToGrafana(metrics);
-}, 10000);
+}, 10000).unref();
 
 function createMetric(metricName, metricValue, metricUnit, metricType, valueType, attributes) {
   attributes = { ...attributes, source: config.source };
@@ -132,4 +154,4 @@ function getMemoryUsagePercentage() {
   return Number(memoryUsage.toFixed(2));
 }
 
-module.exports = { requestTracker, };
+module.exports = { requestTracker, pizzaPurchase };
