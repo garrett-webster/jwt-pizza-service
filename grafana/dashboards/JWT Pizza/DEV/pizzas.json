@@ -43,13 +43,16 @@
                   "spec": {
                     "query": {
                       "kind": "DataQuery",
-                      "group": "",
+                      "group": "prometheus",
                       "version": "v0",
                       "spec": {
                         "editorMode": "code",
                         "expr": "sum(increase(pizzasSold_total{source=\"jwt-pizza-service-dev\"}[1m]))",
                         "legendFormat": "sold",
                         "range": true
+                      },
+                      "datasource": {
+                        "name": "grafanacloud-prom"
                       }
                     },
                     "refId": "A",
@@ -154,13 +157,16 @@
                   "spec": {
                     "query": {
                       "kind": "DataQuery",
-                      "group": "",
+                      "group": "prometheus",
                       "version": "v0",
                       "spec": {
                         "editorMode": "code",
                         "expr": "sum(increase(pizzaCreationFailures_total{source=\"jwt-pizza-service-dev\"}[$__range]))",
                         "legendFormat": "failures",
                         "range": true
+                      },
+                      "datasource": {
+                        "name": "grafanacloud-prom"
                       }
                     },
                     "refId": "A",
@@ -232,13 +238,16 @@
                   "spec": {
                     "query": {
                       "kind": "DataQuery",
-                      "group": "",
+                      "group": "prometheus",
                       "version": "v0",
                       "spec": {
                         "editorMode": "code",
                         "expr": "sum(increase(revenue_total{source=\"jwt-pizza-service-dev\"}[1m]))",
                         "legendFormat": "revenue",
                         "range": true
+                      },
+                      "datasource": {
+                        "name": "grafanacloud-prom"
                       }
                     },
                     "refId": "A",
@@ -343,13 +352,16 @@
                   "spec": {
                     "query": {
                       "kind": "DataQuery",
-                      "group": "",
+                      "group": "prometheus",
                       "version": "v0",
                       "spec": {
                         "editorMode": "code",
                         "expr": "pizzaCreationLatency_milliseconds{source=\"jwt-pizza-service-dev\"}",
                         "legendFormat": "latency",
                         "range": true
+                      },
+                      "datasource": {
+                        "name": "grafanacloud-prom"
                       }
                     },
                     "refId": "A",

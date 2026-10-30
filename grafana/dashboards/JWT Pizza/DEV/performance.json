@@ -45,13 +45,16 @@
                   "spec": {
                     "query": {
                       "kind": "DataQuery",
-                      "group": "",
+                      "group": "prometheus",
                       "version": "v0",
                       "spec": {
                         "editorMode": "code",
                         "expr": "cpuUsagePercentage_percent{source=\"jwt-pizza-service-dev\"}",
                         "legendFormat": "__auto",
                         "range": true
+                      },
+                      "datasource": {
+                        "name": "grafanacloud-prom"
                       }
                     },
                     "refId": "A",
@@ -128,13 +131,16 @@
                   "spec": {
                     "query": {
                       "kind": "DataQuery",
-                      "group": "",
+                      "group": "prometheus",
                       "version": "v0",
                       "spec": {
                         "editorMode": "code",
                         "expr": "memoryUsagePercentage_percent{source=\"jwt-pizza-service-dev\"}",
                         "legendFormat": "__auto",
                         "range": true
+                      },
+                      "datasource": {
+                        "name": "grafanacloud-prom"
                       }
                     },
                     "refId": "A",
