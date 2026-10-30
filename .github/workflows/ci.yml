@@ -137,7 +137,7 @@ jobs:
 
       - name: Deploy new container
         run: |
-          aws ecs update-service --cluster jwt-pizza-service --service jwt-pizza-service --force-new-deployment
+          aws ecs update-service --cluster jwt-pizza-service-next --service jwt-pizza-service-next --force-new-deployment
 
   dashboards:
     name: Dashboards
