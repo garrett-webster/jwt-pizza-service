@@ -3,20 +3,33 @@ const os = require('os');
 
 // Metrics stored in memory
 const requests = {};
+let latencyTotalMs = 0;
+let latencyCount = 0;
 
 // Middleware to track requests
 function requestTracker(req, res, next) {
-  const endpoint = `[${req.method}] ${req.path}`;
-  requests[endpoint] = (requests[endpoint] || 0) + 1;
+  const start = Date.now();
+  requests[req.method] = (requests[req.method] || 0) + 1;
+  res.on('finish', () => {
+    latencyTotalMs += Date.now() - start;
+    latencyCount++;
+  });
   next();
 }
 
 // This will periodically send metrics to Grafana
 setInterval(() => {
   const metrics = [];
-  Object.keys(requests).forEach((endpoint) => {
-    metrics.push(createMetric('requests', requests[endpoint], '1', 'sum', 'asInt', { endpoint }));
+  Object.keys(requests).forEach((method) => {
+    metrics.push(createMetric('requests', requests[method], '1', 'sum', 'asInt', { method }));
   });
+
+  // Average service endpoint latency since the last report
+  if (latencyCount > 0) {
+    metrics.push(createMetric('serviceLatency', latencyTotalMs / latencyCount, 'ms', 'gauge', 'asDouble'));
+    latencyTotalMs = 0;
+    latencyCount = 0;
+  }
 
   metrics.push(createMetric('cpuUsagePercentage', getCpuUsagePercentage(), '%', 'gauge', 'asDouble'));
   metrics.push(createMetric('memoryUsagePercentage', getMemoryUsagePercentage(), '%', 'gauge', 'asDouble'));
