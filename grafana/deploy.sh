@@ -31,7 +31,9 @@ ensure_folder() {
     fi
     url="$GRAFANA_URL/api/folders"
     [ -n "$parent" ] && url+="?parentUid=$parent"
-    uid=$(api "$url" | jq -r --arg t "$title" '[.[] | select(.title == $t)][0].uid // empty')
+    listing=$(api "$url")
+    echo "Folders at '$acc' parent: $(echo "$listing" | jq -c '[.[]? | {title, uid}]' 2>/dev/null || echo "$listing" | head -c 300)"
+    uid=$(echo "$listing" | jq -r --arg t "$title" '[.[] | select(.title == $t)][0].uid // empty')
     if [ -z "$uid" ]; then
       echo "Creating folder: $acc"
       uid=$(api -X POST "$GRAFANA_URL/api/folders" \
@@ -67,6 +69,7 @@ while IFS= read -r -d '' file; do
     rv=$(echo "$existing" | jq -r '.metadata.resourceVersion')
     echo "Updating $rel ($name)"
     echo "$body" | jq --arg rv "$rv" '.metadata.resourceVersion = $rv' | api -X PUT "$base/$name" -d @- > /dev/null
+    api "$base/$name" | jq -c '{name: .metadata.name, generation: .metadata.generation, folder: .metadata.annotations["grafana.app/folder"], panels: (.spec.elements | keys)}'
   else
     echo "Creating $rel ($name)"
     echo "$body" | api -X POST "$base" -d @- > /dev/null
