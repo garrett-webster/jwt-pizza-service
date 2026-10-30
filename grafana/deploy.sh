@@ -9,7 +9,20 @@ set -euo pipefail
 root=${DASHBOARD_ROOT:-grafana/dashboards}
 auth="Authorization: Bearer $GRAFANA_TOKEN"
 
-api() { curl -sf -H "$auth" -H "Content-Type: application/json" "$@"; }
+# Fails (printing the status and a snippet of the body) on anything but a 2xx with a body.
+# Plain `curl -f` lets redirects and empty 200s through, which hid a bad GRAFANA_URL.
+api() {
+  local out code
+  out=$(curl -sS -w '\n%{http_code}' -H "$auth" -H "Content-Type: application/json" "$@") || return 1
+  code=${out##*$'\n'}
+  out=${out%$'\n'*}
+  if [[ $code != 2* || -z $out ]]; then
+    echo "Grafana request failed (HTTP $code): $*" >&2
+    echo "${out:0:300}" >&2
+    return 1
+  fi
+  printf '%s' "$out"
+}
 
 declare -A folder_cache
 FOLDER_UID=""
@@ -65,13 +78,19 @@ while IFS= read -r -d '' file; do
     | if $folder != "" then .metadata.annotations["grafana.app/folder"] = $folder else . end' "$file")
 
   # Update if it exists (needs its resourceVersion), otherwise create
-  if existing=$(api "$base/$name" 2>/dev/null); then
-    rv=$(echo "$existing" | jq -r '.metadata.resourceVersion')
+  existing=$(mktemp)
+  code=$(curl -sS -o "$existing" -w '%{http_code}' -H "$auth" "$base/$name")
+  if [ "$code" = 200 ]; then
+    rv=$(jq -r '.metadata.resourceVersion' "$existing")
     echo "Updating $rel ($name)"
     echo "$body" | jq --arg rv "$rv" '.metadata.resourceVersion = $rv' | api -X PUT "$base/$name" -d @- > /dev/null
     api "$base/$name" | jq -c '{name: .metadata.name, generation: .metadata.generation, folder: .metadata.annotations["grafana.app/folder"], panels: (.spec.elements | keys)}'
-  else
+  elif [ "$code" = 404 ]; then
     echo "Creating $rel ($name)"
     echo "$body" | api -X POST "$base" -d @- > /dev/null
+  else
+    echo "Unexpected HTTP $code looking up $name: $(head -c 300 "$existing")" >&2
+    exit 1
   fi
+  rm -f "$existing"
 done < <(find "$root" -name '*.json' -print0 | sort -z)
