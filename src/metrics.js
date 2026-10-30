@@ -3,7 +3,6 @@ const os = require('os');
 
 // Metrics stored in memory
 const requests = {};
-let greetingChangedCount = 0;
 
 // Middleware to track requests
 function requestTracker(req, res, next) {
