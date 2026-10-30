@@ -5,14 +5,21 @@ const os = require('os');
 const requests = {};
 let latencyTotalMs = 0;
 let latencyCount = 0;
+const authAttempts = { success: 0, failure: 0 };
+const ACTIVE_USER_WINDOW_MS = 5 * 60 * 1000;
+const activeUsers = new Map(); // userId -> last seen (ms)
 
 // Middleware to track requests
 function requestTracker(req, res, next) {
   const start = Date.now();
   requests[req.method] = (requests[req.method] || 0) + 1;
+  if (req.user) activeUsers.set(req.user.id, start);
   res.on('finish', () => {
     latencyTotalMs += Date.now() - start;
     latencyCount++;
+    if (req.method === 'PUT' && req.originalUrl.split('?')[0] === '/api/auth') {
+      authAttempts[res.statusCode < 400 ? 'success' : 'failure']++;
+    }
   });
   next();
 }
@@ -23,6 +30,16 @@ setInterval(() => {
   Object.keys(requests).forEach((method) => {
     metrics.push(createMetric('requests', requests[method], '1', 'sum', 'asInt', { method }));
   });
+
+  Object.keys(authAttempts).forEach((result) => {
+    metrics.push(createMetric('authAttempts', authAttempts[result], '1', 'sum', 'asInt', { result }));
+  });
+
+  const cutoff = Date.now() - ACTIVE_USER_WINDOW_MS;
+  activeUsers.forEach((lastSeen, userId) => {
+    if (lastSeen < cutoff) activeUsers.delete(userId);
+  });
+  metrics.push(createMetric('activeUsers', activeUsers.size, '{users}', 'gauge', 'asInt'));
 
   // Average service endpoint latency since the last report
   if (latencyCount > 0) {
