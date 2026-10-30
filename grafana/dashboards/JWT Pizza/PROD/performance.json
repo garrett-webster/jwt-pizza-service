@@ -63,74 +63,46 @@
           },
           "vizConfig": {
             "kind": "VizConfig",
-            "group": "timeseries",
+            "group": "gauge",
             "version": "13.3.0-40464356088",
             "spec": {
               "options": {
-                "legend": {
-                  "calcs": [],
-                  "displayMode": "list",
-                  "placement": "bottom",
-                  "showLegend": true
+                "reduceOptions": {
+                  "calcs": [
+                    "lastNotNull"
+                  ],
+                  "fields": "",
+                  "values": false
                 },
-                "tooltip": {
-                  "hideZeros": false,
-                  "mode": "single",
-                  "sort": "none"
-                }
+                "orientation": "auto",
+                "showThresholdLabels": false,
+                "showThresholdMarkers": true
               },
               "fieldConfig": {
                 "defaults": {
+                  "color": {
+                    "mode": "thresholds"
+                  },
                   "thresholds": {
                     "mode": "absolute",
                     "steps": [
                       {
-                        "value": 0,
+                        "value": null,
                         "color": "green"
                       },
                       {
-                        "value": 80,
+                        "value": 70,
+                        "color": "yellow"
+                      },
+                      {
+                        "value": 85,
                         "color": "red"
                       }
                     ]
                   },
-                  "color": {
-                    "mode": "palette-classic"
-                  },
-                  "custom": {
-                    "axisBorderShow": false,
-                    "axisCenteredZero": false,
-                    "axisColorMode": "text",
-                    "axisLabel": "",
-                    "axisPlacement": "auto",
-                    "barAlignment": 0,
-                    "barWidthFactor": 0.6,
-                    "drawStyle": "line",
-                    "fillOpacity": 0,
-                    "gradientMode": "none",
-                    "hideFrom": {
-                      "legend": false,
-                      "tooltip": false,
-                      "viz": false
-                    },
-                    "insertNulls": false,
-                    "lineInterpolation": "linear",
-                    "lineWidth": 1,
-                    "pointSize": 5,
-                    "scaleDistribution": {
-                      "type": "linear"
-                    },
-                    "showPoints": "auto",
-                    "showValues": false,
-                    "spanNulls": false,
-                    "stacking": {
-                      "group": "A",
-                      "mode": "none"
-                    },
-                    "thresholdsStyle": {
-                      "mode": "off"
-                    }
-                  }
+                  "unit": "percent",
+                  "min": 0,
+                  "max": 100
                 },
                 "overrides": []
               }
@@ -174,74 +146,46 @@
           },
           "vizConfig": {
             "kind": "VizConfig",
-            "group": "timeseries",
+            "group": "bargauge",
             "version": "13.3.0-40464356088",
             "spec": {
               "options": {
-                "legend": {
-                  "calcs": [],
-                  "displayMode": "list",
-                  "placement": "bottom",
-                  "showLegend": true
+                "reduceOptions": {
+                  "calcs": [
+                    "lastNotNull"
+                  ],
+                  "fields": "",
+                  "values": false
                 },
-                "tooltip": {
-                  "hideZeros": false,
-                  "mode": "single",
-                  "sort": "none"
-                }
+                "orientation": "horizontal",
+                "displayMode": "gradient",
+                "showUnfilled": true
               },
               "fieldConfig": {
                 "defaults": {
+                  "color": {
+                    "mode": "thresholds"
+                  },
                   "thresholds": {
                     "mode": "absolute",
                     "steps": [
                       {
-                        "value": 0,
+                        "value": null,
                         "color": "green"
                       },
                       {
-                        "value": 80,
+                        "value": 70,
+                        "color": "yellow"
+                      },
+                      {
+                        "value": 85,
                         "color": "red"
                       }
                     ]
                   },
-                  "color": {
-                    "mode": "palette-classic"
-                  },
-                  "custom": {
-                    "axisBorderShow": false,
-                    "axisCenteredZero": false,
-                    "axisColorMode": "text",
-                    "axisLabel": "",
-                    "axisPlacement": "auto",
-                    "barAlignment": 0,
-                    "barWidthFactor": 0.6,
-                    "drawStyle": "line",
-                    "fillOpacity": 0,
-                    "gradientMode": "none",
-                    "hideFrom": {
-                      "legend": false,
-                      "tooltip": false,
-                      "viz": false
-                    },
-                    "insertNulls": false,
-                    "lineInterpolation": "linear",
-                    "lineWidth": 1,
-                    "pointSize": 5,
-                    "scaleDistribution": {
-                      "type": "linear"
-                    },
-                    "showPoints": "auto",
-                    "showValues": false,
-                    "spanNulls": false,
-                    "stacking": {
-                      "group": "A",
-                      "mode": "none"
-                    },
-                    "thresholdsStyle": {
-                      "mode": "off"
-                    }
-                  }
+                  "unit": "percent",
+                  "min": 0,
+                  "max": 100
                 },
                 "overrides": []
               }

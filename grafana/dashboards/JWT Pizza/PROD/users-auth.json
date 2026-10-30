@@ -63,73 +63,36 @@
           },
           "vizConfig": {
             "kind": "VizConfig",
-            "group": "timeseries",
+            "group": "stat",
             "version": "13.3.0-40464356088",
             "spec": {
               "options": {
-                "legend": {
-                  "calcs": [],
-                  "displayMode": "list",
-                  "placement": "bottom",
-                  "showLegend": true
+                "reduceOptions": {
+                  "calcs": [
+                    "lastNotNull"
+                  ],
+                  "fields": "",
+                  "values": false
                 },
-                "tooltip": {
-                  "hideZeros": false,
-                  "mode": "single",
-                  "sort": "none"
-                }
+                "colorMode": "value",
+                "graphMode": "area",
+                "justifyMode": "auto",
+                "orientation": "auto",
+                "textMode": "auto"
               },
               "fieldConfig": {
                 "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
                   "thresholds": {
                     "mode": "absolute",
                     "steps": [
                       {
-                        "value": 0,
+                        "value": null,
                         "color": "green"
-                      },
-                      {
-                        "value": 80,
-                        "color": "red"
                       }
                     ]
-                  },
-                  "color": {
-                    "mode": "palette-classic"
-                  },
-                  "custom": {
-                    "axisBorderShow": false,
-                    "axisCenteredZero": false,
-                    "axisColorMode": "text",
-                    "axisLabel": "",
-                    "axisPlacement": "auto",
-                    "barAlignment": 0,
-                    "barWidthFactor": 0.6,
-                    "drawStyle": "line",
-                    "fillOpacity": 0,
-                    "gradientMode": "none",
-                    "hideFrom": {
-                      "legend": false,
-                      "tooltip": false,
-                      "viz": false
-                    },
-                    "insertNulls": false,
-                    "lineInterpolation": "linear",
-                    "lineWidth": 1,
-                    "pointSize": 5,
-                    "scaleDistribution": {
-                      "type": "linear"
-                    },
-                    "showPoints": "auto",
-                    "showValues": false,
-                    "spanNulls": false,
-                    "stacking": {
-                      "group": "A",
-                      "mode": "none"
-                    },
-                    "thresholdsStyle": {
-                      "mode": "off"
-                    }
                   }
                 },
                 "overrides": []
@@ -216,8 +179,8 @@
                     "axisPlacement": "auto",
                     "barAlignment": 0,
                     "barWidthFactor": 0.6,
-                    "drawStyle": "line",
-                    "fillOpacity": 0,
+                    "drawStyle": "bars",
+                    "fillOpacity": 80,
                     "gradientMode": "none",
                     "hideFrom": {
                       "legend": false,
@@ -236,14 +199,45 @@
                     "spanNulls": false,
                     "stacking": {
                       "group": "A",
-                      "mode": "none"
+                      "mode": "normal"
                     },
                     "thresholdsStyle": {
                       "mode": "off"
                     }
                   }
                 },
-                "overrides": []
+                "overrides": [
+                  {
+                    "matcher": {
+                      "id": "byName",
+                      "options": "success"
+                    },
+                    "properties": [
+                      {
+                        "id": "color",
+                        "value": {
+                          "mode": "fixed",
+                          "fixedColor": "green"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "matcher": {
+                      "id": "byName",
+                      "options": "failure"
+                    },
+                    "properties": [
+                      {
+                        "id": "color",
+                        "value": {
+                          "mode": "fixed",
+                          "fixedColor": "red"
+                        }
+                      }
+                    ]
+                  }
+                ]
               }
             }
           }
