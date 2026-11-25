@@ -9,7 +9,10 @@
       "data": [
         {
           "refId": "A",
-          "relativeTimeRange": { "from": 600, "to": 0 },
+          "relativeTimeRange": {
+            "from": 600,
+            "to": 0
+          },
           "datasourceUid": "grafanacloud-prom",
           "model": {
             "refId": "A",
@@ -22,14 +25,29 @@
         },
         {
           "refId": "C",
-          "relativeTimeRange": { "from": 0, "to": 0 },
+          "relativeTimeRange": {
+            "from": 0,
+            "to": 0
+          },
           "datasourceUid": "__expr__",
           "model": {
             "refId": "C",
             "type": "threshold",
             "expression": "A",
-            "datasource": { "type": "__expr__", "uid": "__expr__" },
-            "conditions": [{ "evaluator": { "type": "gt", "params": [20] } }]
+            "datasource": {
+              "type": "__expr__",
+              "uid": "__expr__"
+            },
+            "conditions": [
+              {
+                "evaluator": {
+                  "type": "gt",
+                  "params": [
+                    20
+                  ]
+                }
+              }
+            ]
           }
         }
       ],
@@ -42,8 +60,541 @@
         "__dashboardUid__": "jwt-pizza-prod-health",
         "__panelId__": "3"
       },
-      "labels": { "service": "jwt-pizza-service", "severity": "critical" },
-      "notification_settings": { "receiver": "JWT Pizza DevOps Contact" },
+      "labels": {
+        "service": "jwt-pizza-service",
+        "severity": "critical"
+      },
+      "notification_settings": {
+        "receiver": "JWT Pizza DevOps Contact"
+      },
+      "isPaused": false
+    },
+    {
+      "uid": "jwt-pizza-api-errors",
+      "title": "API error rate above 20%",
+      "condition": "C",
+      "data": [
+        {
+          "refId": "A",
+          "relativeTimeRange": {
+            "from": 600,
+            "to": 0
+          },
+          "datasourceUid": "grafanacloud-prom",
+          "model": {
+            "refId": "A",
+            "editorMode": "code",
+            "expr": "100 * sum(rate(httpResponses_total{source=\"jwt-pizza-service\", route=~\"/api.*\", status=\"5xx\"}[2m])) / sum(rate(httpResponses_total{source=\"jwt-pizza-service\", route=~\"/api.*\"}[2m]))",
+            "instant": true,
+            "range": false
+          }
+        },
+        {
+          "refId": "C",
+          "relativeTimeRange": {
+            "from": 0,
+            "to": 0
+          },
+          "datasourceUid": "__expr__",
+          "model": {
+            "refId": "C",
+            "type": "threshold",
+            "expression": "A",
+            "datasource": {
+              "type": "__expr__",
+              "uid": "__expr__"
+            },
+            "conditions": [
+              {
+                "evaluator": {
+                  "type": "gt",
+                  "params": [
+                    20
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "noDataState": "OK",
+      "execErrState": "Error",
+      "for": "2m",
+      "annotations": {
+        "summary": "{{ printf \"%.0f\" $values.A.Value }}% of API requests are failing",
+        "description": "More than 20% of all /api requests have returned 5xx for 2 minutes. 5xx responses / minute by endpoint shows which endpoints are failing; Recent errors has the details.",
+        "__dashboardUid__": "jwt-pizza-prod-health",
+        "__panelId__": "3"
+      },
+      "labels": {
+        "service": "jwt-pizza-service",
+        "severity": "critical"
+      },
+      "notification_settings": {
+        "receiver": "JWT Pizza DevOps Contact"
+      },
+      "isPaused": false
+    },
+    {
+      "uid": "jwt-pizza-no-orders",
+      "title": "No successful orders in 5 minutes",
+      "condition": "C",
+      "data": [
+        {
+          "refId": "A",
+          "relativeTimeRange": {
+            "from": 600,
+            "to": 0
+          },
+          "datasourceUid": "grafanacloud-prom",
+          "model": {
+            "refId": "A",
+            "editorMode": "code",
+            "expr": "sum(increase(orders_total{source=\"jwt-pizza-service\", result=\"success\"}[5m]))",
+            "instant": true,
+            "range": false
+          }
+        },
+        {
+          "refId": "C",
+          "relativeTimeRange": {
+            "from": 0,
+            "to": 0
+          },
+          "datasourceUid": "__expr__",
+          "model": {
+            "refId": "C",
+            "type": "threshold",
+            "expression": "A",
+            "datasource": {
+              "type": "__expr__",
+              "uid": "__expr__"
+            },
+            "conditions": [
+              {
+                "evaluator": {
+                  "type": "lt",
+                  "params": [
+                    1
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "noDataState": "Alerting",
+      "execErrState": "Error",
+      "for": "2m",
+      "annotations": {
+        "summary": "No pizza orders have succeeded in the last 5 minutes",
+        "description": "Either every order is failing (check Order outcomes for the cause), the service is down, or the traffic simulation has stopped.",
+        "__dashboardUid__": "jwt-pizza-prod-health",
+        "__panelId__": "4"
+      },
+      "labels": {
+        "service": "jwt-pizza-service",
+        "severity": "critical"
+      },
+      "notification_settings": {
+        "receiver": "JWT Pizza DevOps Contact"
+      },
+      "isPaused": false
+    },
+    {
+      "uid": "jwt-pizza-factory-latency",
+      "title": "Pizza factory latency above 2s",
+      "condition": "C",
+      "data": [
+        {
+          "refId": "A",
+          "relativeTimeRange": {
+            "from": 600,
+            "to": 0
+          },
+          "datasourceUid": "grafanacloud-prom",
+          "model": {
+            "refId": "A",
+            "editorMode": "code",
+            "expr": "max(pizzaCreationLatency_milliseconds{source=\"jwt-pizza-service\"})",
+            "instant": true,
+            "range": false
+          }
+        },
+        {
+          "refId": "C",
+          "relativeTimeRange": {
+            "from": 0,
+            "to": 0
+          },
+          "datasourceUid": "__expr__",
+          "model": {
+            "refId": "C",
+            "type": "threshold",
+            "expression": "A",
+            "datasource": {
+              "type": "__expr__",
+              "uid": "__expr__"
+            },
+            "conditions": [
+              {
+                "evaluator": {
+                  "type": "gt",
+                  "params": [
+                    2000
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "noDataState": "OK",
+      "execErrState": "Error",
+      "for": "2m",
+      "annotations": {
+        "summary": "Pizza factory orders are taking {{ printf \"%.0f\" $values.A.Value }}ms on average",
+        "description": "Orders to pizza-factory.cs329.click normally take well under a second. Check the Factory requests logs for errors and the reportUrl.",
+        "__dashboardUid__": "jwt-pizza-prod-health",
+        "__panelId__": "7"
+      },
+      "labels": {
+        "service": "jwt-pizza-service",
+        "severity": "warning"
+      },
+      "notification_settings": {
+        "receiver": "JWT Pizza DevOps Contact"
+      },
+      "isPaused": false
+    },
+    {
+      "uid": "jwt-pizza-service-latency",
+      "title": "Service latency above 1s",
+      "condition": "C",
+      "data": [
+        {
+          "refId": "A",
+          "relativeTimeRange": {
+            "from": 600,
+            "to": 0
+          },
+          "datasourceUid": "grafanacloud-prom",
+          "model": {
+            "refId": "A",
+            "editorMode": "code",
+            "expr": "max(serviceLatency_milliseconds{source=\"jwt-pizza-service\"})",
+            "instant": true,
+            "range": false
+          }
+        },
+        {
+          "refId": "C",
+          "relativeTimeRange": {
+            "from": 0,
+            "to": 0
+          },
+          "datasourceUid": "__expr__",
+          "model": {
+            "refId": "C",
+            "type": "threshold",
+            "expression": "A",
+            "datasource": {
+              "type": "__expr__",
+              "uid": "__expr__"
+            },
+            "conditions": [
+              {
+                "evaluator": {
+                  "type": "gt",
+                  "params": [
+                    1000
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "noDataState": "OK",
+      "execErrState": "Error",
+      "for": "2m",
+      "annotations": {
+        "summary": "Requests are taking {{ printf \"%.0f\" $values.A.Value }}ms on average",
+        "description": "Average response time across all endpoints has been above 1s for 2 minutes. Normal is around 300ms. Compare with factory latency to see whether the factory is the cause.",
+        "__dashboardUid__": "jwt-pizza-prod-health",
+        "__panelId__": "7"
+      },
+      "labels": {
+        "service": "jwt-pizza-service",
+        "severity": "warning"
+      },
+      "notification_settings": {
+        "receiver": "JWT Pizza DevOps Contact"
+      },
+      "isPaused": false
+    },
+    {
+      "uid": "jwt-pizza-not-reporting",
+      "title": "Service not reporting metrics",
+      "condition": "C",
+      "data": [
+        {
+          "refId": "A",
+          "relativeTimeRange": {
+            "from": 600,
+            "to": 0
+          },
+          "datasourceUid": "grafanacloud-prom",
+          "model": {
+            "refId": "A",
+            "editorMode": "code",
+            "expr": "absent_over_time(chaosEnabled{source=\"jwt-pizza-service\"}[2m])",
+            "instant": true,
+            "range": false
+          }
+        },
+        {
+          "refId": "C",
+          "relativeTimeRange": {
+            "from": 0,
+            "to": 0
+          },
+          "datasourceUid": "__expr__",
+          "model": {
+            "refId": "C",
+            "type": "threshold",
+            "expression": "A",
+            "datasource": {
+              "type": "__expr__",
+              "uid": "__expr__"
+            },
+            "conditions": [
+              {
+                "evaluator": {
+                  "type": "gt",
+                  "params": [
+                    0
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "noDataState": "OK",
+      "execErrState": "Error",
+      "for": "1m",
+      "annotations": {
+        "summary": "jwt-pizza-service has not reported metrics for 2 minutes",
+        "description": "The service is probably down or restarting. Check the ECS service and https://pizza-service.garrett-webster.com.",
+        "__dashboardUid__": "jwt-pizza-prod-health",
+        "__panelId__": "1"
+      },
+      "labels": {
+        "service": "jwt-pizza-service",
+        "severity": "critical"
+      },
+      "notification_settings": {
+        "receiver": "JWT Pizza DevOps Contact"
+      },
+      "isPaused": false
+    },
+    {
+      "uid": "jwt-pizza-cpu",
+      "title": "CPU above 80%",
+      "condition": "C",
+      "data": [
+        {
+          "refId": "A",
+          "relativeTimeRange": {
+            "from": 600,
+            "to": 0
+          },
+          "datasourceUid": "grafanacloud-prom",
+          "model": {
+            "refId": "A",
+            "editorMode": "code",
+            "expr": "max(cpuUsagePercentage_percent{source=\"jwt-pizza-service\"})",
+            "instant": true,
+            "range": false
+          }
+        },
+        {
+          "refId": "C",
+          "relativeTimeRange": {
+            "from": 0,
+            "to": 0
+          },
+          "datasourceUid": "__expr__",
+          "model": {
+            "refId": "C",
+            "type": "threshold",
+            "expression": "A",
+            "datasource": {
+              "type": "__expr__",
+              "uid": "__expr__"
+            },
+            "conditions": [
+              {
+                "evaluator": {
+                  "type": "gt",
+                  "params": [
+                    80
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "noDataState": "OK",
+      "execErrState": "Error",
+      "for": "5m",
+      "annotations": {
+        "summary": "CPU usage is {{ printf \"%.0f\" $values.A.Value }}%",
+        "description": "CPU usage has been above 80% for 5 minutes.",
+        "__dashboardUid__": "jwt-pizza-prod-pizza-dashboard",
+        "__panelId__": "4"
+      },
+      "labels": {
+        "service": "jwt-pizza-service",
+        "severity": "warning"
+      },
+      "notification_settings": {
+        "receiver": "JWT Pizza DevOps Contact"
+      },
+      "isPaused": false
+    },
+    {
+      "uid": "jwt-pizza-memory",
+      "title": "Memory above 90%",
+      "condition": "C",
+      "data": [
+        {
+          "refId": "A",
+          "relativeTimeRange": {
+            "from": 600,
+            "to": 0
+          },
+          "datasourceUid": "grafanacloud-prom",
+          "model": {
+            "refId": "A",
+            "editorMode": "code",
+            "expr": "max(memoryUsagePercentage_percent{source=\"jwt-pizza-service\"})",
+            "instant": true,
+            "range": false
+          }
+        },
+        {
+          "refId": "C",
+          "relativeTimeRange": {
+            "from": 0,
+            "to": 0
+          },
+          "datasourceUid": "__expr__",
+          "model": {
+            "refId": "C",
+            "type": "threshold",
+            "expression": "A",
+            "datasource": {
+              "type": "__expr__",
+              "uid": "__expr__"
+            },
+            "conditions": [
+              {
+                "evaluator": {
+                  "type": "gt",
+                  "params": [
+                    90
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "noDataState": "OK",
+      "execErrState": "Error",
+      "for": "5m",
+      "annotations": {
+        "summary": "Memory usage is {{ printf \"%.0f\" $values.A.Value }}%",
+        "description": "Memory usage has been above 90% for 5 minutes.",
+        "__dashboardUid__": "jwt-pizza-prod-pizza-dashboard",
+        "__panelId__": "5"
+      },
+      "labels": {
+        "service": "jwt-pizza-service",
+        "severity": "warning"
+      },
+      "notification_settings": {
+        "receiver": "JWT Pizza DevOps Contact"
+      },
+      "isPaused": false
+    },
+    {
+      "uid": "jwt-pizza-chaos-on",
+      "title": "Chaos injection left on",
+      "condition": "C",
+      "data": [
+        {
+          "refId": "A",
+          "relativeTimeRange": {
+            "from": 600,
+            "to": 0
+          },
+          "datasourceUid": "grafanacloud-prom",
+          "model": {
+            "refId": "A",
+            "editorMode": "code",
+            "expr": "max(chaosEnabled{source=\"jwt-pizza-service\"})",
+            "instant": true,
+            "range": false
+          }
+        },
+        {
+          "refId": "C",
+          "relativeTimeRange": {
+            "from": 0,
+            "to": 0
+          },
+          "datasourceUid": "__expr__",
+          "model": {
+            "refId": "C",
+            "type": "threshold",
+            "expression": "A",
+            "datasource": {
+              "type": "__expr__",
+              "uid": "__expr__"
+            },
+            "conditions": [
+              {
+                "evaluator": {
+                  "type": "gt",
+                  "params": [
+                    0
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "noDataState": "OK",
+      "execErrState": "Error",
+      "for": "15m",
+      "annotations": {
+        "summary": "Chaos injection has been on for 15 minutes",
+        "description": "Half of all orders are failing on purpose. Turn it off with PUT /api/order/chaos/false as an admin.",
+        "__dashboardUid__": "jwt-pizza-prod-health",
+        "__panelId__": "1"
+      },
+      "labels": {
+        "service": "jwt-pizza-service",
+        "severity": "warning"
+      },
+      "notification_settings": {
+        "receiver": "JWT Pizza DevOps Contact"
+      },
       "isPaused": false
     }
   ]
