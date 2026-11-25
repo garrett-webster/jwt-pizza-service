@@ -1,0 +1,50 @@
+{
+  "title": "JWT Pizza Health",
+  "interval": "30s",
+  "rules": [
+    {
+      "uid": "jwt-pizza-order-errors",
+      "title": "Order error rate above 20%",
+      "condition": "C",
+      "data": [
+        {
+          "refId": "A",
+          "relativeTimeRange": { "from": 600, "to": 0 },
+          "datasourceUid": "grafanacloud-prom",
+          "model": {
+            "refId": "A",
+            "editorMode": "code",
+            "expr": "100 * sum(rate(httpResponses_total{source=\"jwt-pizza-service\", method=\"POST\", route=\"/api/order\", status=\"5xx\"}[2m])) / sum(rate(httpResponses_total{source=\"jwt-pizza-service\", method=\"POST\", route=\"/api/order\"}[2m]))",
+            "instant": true,
+            "range": false,
+            "legendFormat": "order error rate"
+          }
+        },
+        {
+          "refId": "C",
+          "relativeTimeRange": { "from": 0, "to": 0 },
+          "datasourceUid": "__expr__",
+          "model": {
+            "refId": "C",
+            "type": "threshold",
+            "expression": "A",
+            "datasource": { "type": "__expr__", "uid": "__expr__" },
+            "conditions": [{ "evaluator": { "type": "gt", "params": [20] } }]
+          }
+        }
+      ],
+      "noDataState": "OK",
+      "execErrState": "Error",
+      "for": "1m",
+      "annotations": {
+        "summary": "{{ printf \"%.0f\" $values.A.Value }}% of pizza orders are failing",
+        "description": "More than 20% of POST /api/order requests have returned 5xx for at least a minute. Check the JWT Pizza Health dashboard: the Chaos panel shows whether chaos injection is on, and Order outcomes shows the failure cause.",
+        "__dashboardUid__": "jwt-pizza-prod-health",
+        "__panelId__": "3"
+      },
+      "labels": { "service": "jwt-pizza-service", "severity": "critical" },
+      "notification_settings": { "receiver": "JWT Pizza DevOps Contact" },
+      "isPaused": false
+    }
+  ]
+}

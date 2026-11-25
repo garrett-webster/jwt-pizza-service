@@ -3,10 +3,14 @@
 #   - Directory structure = folder structure (created if missing, nesting supported)
 #   - Each *.json file is a v2 dashboard resource; its title comes from spec.title
 #   - metadata.name is kept if present in the file, otherwise derived from the path
+# Then syncs grafana/alerts/** the same way:
+#   - Each *.json file is one alert rule group ({title, interval, rules}), replaced as a whole
+#   - Its directory is the folder it lives in, so alerts can sit beside their dashboards
 set -euo pipefail
 
 : "${GRAFANA_URL:?}" "${GRAFANA_TOKEN:?}" "${GRAFANA_NAMESPACE:?}"
 root=${DASHBOARD_ROOT:-grafana/dashboards}
+alerts_root=${ALERTS_ROOT:-grafana/alerts}
 auth="Authorization: Bearer $GRAFANA_TOKEN"
 
 # Fails (printing the status and a snippet of the body) on anything but a 2xx with a body.
@@ -94,3 +98,27 @@ while IFS= read -r -d '' file; do
   fi
   rm -f "$existing"
 done < <(find "$root" -name '*.json' -print0 | sort -z)
+
+[ -d "$alerts_root" ] || exit 0
+while IFS= read -r -d '' file; do
+  rel=${file#"$alerts_root"/}
+  dir=$(dirname "$rel")
+  if [ "$dir" = "." ]; then
+    echo "Alert rule groups must be inside a folder: $rel" >&2
+    exit 1
+  fi
+  ensure_folder "$dir"
+
+  group=$(jq -r '.title' "$file")
+  group_path=$(jq -rn --arg g "$group" '$g | @uri')
+  body=$(jq --arg folder "$FOLDER_UID" '
+    .folderUid = $folder
+    | .title as $group
+    | .rules |= map(.folderUID = $folder | .ruleGroup = $group)' "$file")
+
+  echo "Updating alert rule group $rel ($group)"
+  # X-Disable-Provenance keeps the rules editable in the Grafana UI
+  echo "$body" | api -X PUT -H "X-Disable-Provenance: true" \
+    "$GRAFANA_URL/api/v1/provisioning/folder/$FOLDER_UID/rule-groups/$group_path" -d @- |
+    jq -c '{group: .title, interval, rules: [.rules[] | {uid, title, receiver: .notification_settings.receiver}]}'
+done < <(find "$alerts_root" -name '*.json' -print0 | sort -z)
