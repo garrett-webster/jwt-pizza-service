@@ -1,6 +1,6 @@
 {
   "title": "JWT Pizza Health",
-  "interval": "30s",
+  "interval": 30,
   "rules": [
     {
       "uid": "jwt-pizza-order-errors",
