@@ -81,3 +81,47 @@ test('reports a factory failure', async () => {
     expect(response.body).toEqual({ message: 'Failed to fulfill order at factory', followLinkToEndChaos: '/report/2' });
     expect(DB.addDinerOrder).toHaveBeenCalledWith(expect.objectContaining({ id: 1 }), { items: [] });
 });
+
+describe('chaos', () => {
+    const setChaos = (token, state) => request(app).put(`/api/order/chaos/${state}`).set('Authorization', `Bearer ${token}`);
+    const order = () => request(app).post('/api/order').set('Authorization', `Bearer ${dinerToken}`).send({ items: [] });
+
+    afterEach(async () => {
+        jest.restoreAllMocks();
+        await setChaos(adminToken, false);
+    });
+
+    test('requires authentication', async () => {
+        const response = await request(app).put('/api/order/chaos/true');
+        expect(response.status).toBe(401);
+    });
+
+    test('ignores diners trying to turn chaos on', async () => {
+        const response = await setChaos(dinerToken, true);
+        expect(response.status).toBe(200);
+        expect(response.body).toEqual({ chaos: false });
+    });
+
+    test('lets admins turn chaos on and off', async () => {
+        expect((await setChaos(adminToken, true)).body).toEqual({ chaos: true });
+        expect((await setChaos(adminToken, false)).body).toEqual({ chaos: false });
+    });
+
+    test('fails orders when chaos strikes', async () => {
+        await setChaos(adminToken, true);
+        jest.spyOn(Math, 'random').mockReturnValue(0.1);
+        const response = await order();
+        expect(response.status).toBe(500);
+        expect(response.body.message).toBe('Chaos monkey');
+        expect(DB.addDinerOrder).not.toHaveBeenCalled();
+    });
+
+    test('lets orders through when chaos does not strike', async () => {
+        await setChaos(adminToken, true);
+        jest.spyOn(Math, 'random').mockReturnValue(0.9);
+        global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ reportUrl: '/report/3', jwt: 'factory-jwt' }) });
+        const response = await order();
+        expect(response.status).toBe(200);
+        expect(DB.addDinerOrder).toHaveBeenCalled();
+    });
+});

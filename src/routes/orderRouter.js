@@ -40,6 +40,14 @@ orderRouter.docs = [
     example: `curl -X POST localhost:3000/api/order -H 'Content-Type: application/json' -d '{"franchiseId": 1, "storeId":1, "items":[{ "menuId": 1, "description": "Veggie", "price": 0.05 }]}'  -H 'Authorization: Bearer tttttt'`,
     response: { order: { franchiseId: 1, storeId: 1, items: [{ menuId: 1, description: 'Veggie', price: 0.05 }], id: 1 }, jwt: '1111111111' },
   },
+  {
+    method: 'PUT',
+    path: '/api/order/chaos/:state',
+    requiresAuth: true,
+    description: 'Turn chaos on or off. When on, half of all order requests fail. Only admins can change it',
+    example: `curl -X PUT localhost:3000/api/order/chaos/true -H 'Authorization: Bearer tttttt'`,
+    response: { chaos: true },
+  },
 ];
 
 // getMenu
@@ -74,6 +82,30 @@ orderRouter.get(
   })
 );
 
+// setChaos
+let enableChaos = false;
+orderRouter.put(
+  '/chaos/:state',
+  authRouter.authenticateToken,
+  asyncHandler(async (req, res) => {
+    if (req.user.isRole(Role.Admin)) {
+      enableChaos = req.params.state === 'true';
+      metrics.setChaos(enableChaos);
+    }
+
+    res.json({ chaos: enableChaos });
+  })
+);
+
+// Must stay ahead of createOrder so it can fail the request first
+orderRouter.post('/', (req, res, next) => {
+  if (enableChaos && Math.random() < 0.5) {
+    res.locals.orderResult = 'chaos';
+    throw new StatusCodeError('Chaos monkey', 500);
+  }
+  next();
+});
+
 // createOrder
 orderRouter.post(
   '/',
@@ -96,6 +128,7 @@ orderRouter.post(
       res.send({ order, followLinkToEndChaos: j.reportUrl, jwt: j.jwt });
     } else {
       metrics.pizzaPurchase(false, latency, 0, 0);
+      res.locals.orderResult = 'factory';
       res.status(500).send({ message: 'Failed to fulfill order at factory', followLinkToEndChaos: j.reportUrl });
     }
   })
